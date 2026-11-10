@@ -4,42 +4,49 @@
 <meta name="referrer" content="no-referrer">
 <title>Uzum Монитор цен</title>
 <style>
-:root{--bg:#f4f3f7;--card:#fff;--ink:#1f2026;--mute:#6f7280;--line:#e6e5ec;--acc:#7000ff;--acc-ink:#fff;
---good:#0a8a4a;--good-bg:#e3f6ec;--bad:#c62828;--bad-bg:#fdeaea;--warn:#8a5a00;--warn-bg:#fff4d6}
-@media (prefers-color-scheme:dark){:root{--bg:#131318;--card:#1d1d25;--ink:#ecebf2;--mute:#9a9cab;--line:#2e2e3a;
---acc:#9a5cff;--good:#4cd08a;--good-bg:#12331f;--bad:#ff7b7b;--bad-bg:#3a1717;--warn:#f0c060;--warn-bg:#3a2e10}}
+:root{--bg:#f4f3f7;--card:#fff;--ink:#1f2026;--mute:#5f6270;--line:#e6e5ec;--acc:#7000ff;--acc-ink:#fff;
+--good:#076b39;--good-bg:#e3f6ec;--bad:#b3261e;--bad-bg:#fdeaea;--warn:#7a4f00;--warn-bg:#fff4d6}
+@media (prefers-color-scheme:dark){:root{--bg:#131318;--card:#1d1d25;--ink:#ecebf2;--mute:#a3a5b3;--line:#2e2e3a;
+--acc:#a06bff;--good:#4cd08a;--good-bg:#12331f;--bad:#ff8a80;--bad-bg:#3a1717;--warn:#f0c060;--warn-bg:#3a2e10}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Roboto,sans-serif}
-.wrap{max-width:720px;margin:0 auto;padding:18px 12px 60px}
-h1{font-size:21px;margin:0 0 2px;letter-spacing:-.01em}
-.sub{color:var(--mute);margin-bottom:14px;font-size:13px}
-form{display:flex;gap:8px;margin-bottom:6px}
-input[type=text]{flex:1;min-width:0;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font:inherit}
-input[type=text]:focus{outline:2px solid var(--acc);outline-offset:1px}
-button{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--acc);color:var(--acc-ink);font-weight:600}
-button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500;padding:8px 12px;border-radius:10px;font-size:13px}
-button:disabled{opacity:.5}
-.msg{min-height:18px;font-size:13.5px;color:var(--bad);margin-bottom:8px}
-.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--mute);font-size:12.5px;margin:4px 0 12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:12px}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,Roboto,sans-serif}
+button{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;gap:8px;padding:14px 14px 8px}
+h1{margin:0;font-size:22px;font-weight:700;flex:1;letter-spacing:-.01em}
+.login{height:44px;border-radius:12px;border:0;background:var(--acc);color:var(--acc-ink);font-size:14px;font-weight:600;padding:0 14px;display:flex;align-items:center;gap:8px}
+main{padding:0 14px 170px}
+.status{display:flex;align-items:center;gap:8px;color:var(--mute);font-size:13px;margin-bottom:10px;min-height:36px}
+.status span{flex:1}
+.ghost{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:500;min-height:36px}
+.ghost:disabled{opacity:.5}
+.primary{background:var(--acc);color:var(--acc-ink);border:0;border-radius:12px;padding:0 18px;height:48px;font-weight:600}
+.chips{display:flex;gap:8px;overflow-x:auto;margin:0 -14px 12px;padding:0 14px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{height:36px;border-radius:18px;border:1px solid var(--line);background:var(--card);font-size:13px;font-weight:500;padding:0 14px;white-space:nowrap;flex:none}
+.chip.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:10px}
 .top{display:flex;gap:12px}
-.pic{width:78px;height:104px;border-radius:10px;object-fit:cover;background:var(--line);flex:none}
+.pic{width:64px;height:86px;border-radius:10px;object-fit:cover;background:var(--line);flex:none}
 .info{flex:1;min-width:0}
-.name{font-weight:600;font-size:15px;color:var(--ink);text-decoration:none;display:block;overflow-wrap:anywhere}
-.seller{color:var(--mute);font-size:12.5px;margin-top:2px}
-.prices{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:8px}
-.price{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.old{color:var(--mute);text-decoration:line-through;font-variant-numeric:tabular-nums;font-size:13.5px}
-.delta{font-size:12px;font-weight:600;padding:2px 7px;border-radius:999px}
-.delta.down{background:var(--good-bg);color:var(--good)}.delta.up{background:var(--bad-bg);color:var(--bad)}
-.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.tag{font-size:12px;padding:3px 8px;border-radius:999px;background:var(--bg);color:var(--mute)}
+.nrow{display:flex;align-items:flex-start;gap:2px}
+.name{flex:1;font-weight:600;font-size:14px;line-height:1.3;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.more{width:44px;height:44px;margin:-10px -10px -8px 0;border:0;background:transparent;display:flex;align-items:center;justify-content:center;flex:none}
+.sub{color:var(--mute);font-size:12px;margin-top:2px}
+.prow{display:flex;align-items:center;gap:8px;margin-top:6px}
+.pcol{flex:1;min-width:0}
+.price{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.oldl{color:var(--mute);font-size:12px;font-variant-numeric:tabular-nums}
+.cardp{font-size:12.5px;color:var(--acc);font-weight:600}
+.spark{width:84px;height:36px;flex:none}
+.tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.tag{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;background:var(--bg);color:var(--mute)}
 .tag.good{background:var(--good-bg);color:var(--good)}.tag.bad{background:var(--bad-bg);color:var(--bad)}.tag.warn{background:var(--warn-bg);color:var(--warn)}
+.when{font-size:12px;color:var(--mute)}
 .err{margin-top:8px;font-size:12.5px;color:var(--bad)}
 .warnline{margin-top:8px;font-size:12.5px;color:var(--warn)}
-.acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .hist{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
-svg{width:100%;height:150px;display:block}
+.hist svg{width:100%;height:150px;display:block}
 .axis{fill:var(--mute);font-size:11px}
 .tblwrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
@@ -47,109 +54,78 @@ th,td{text-align:left;padding:6px;border-bottom:1px solid var(--line);white-spac
 td.ev{white-space:normal;min-width:150px}
 th{color:var(--mute);font-weight:500}
 td.n{font-variant-numeric:tabular-nums}
-.empty{text-align:center;color:var(--mute);padding:36px 10px}
 .toggle{display:flex;gap:12px;align-items:center;font-size:12.5px;color:var(--mute);margin-top:6px}
-.setrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.empty{text-align:center;color:var(--mute);padding:48px 16px;font-size:14px}
+.note{color:var(--mute);font-size:13px;margin:0 0 10px}
+.feed{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.feed:last-child{border-bottom:0}
+.feed img,.feed .ph{width:40px;height:54px;border-radius:6px;object-fit:cover;background:var(--line);flex:none}
+.feed .ft{flex:1;min-width:0;font-size:13px}
+.feed .ft b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed .ft small{color:var(--mute)}
+.feed input{width:22px;height:22px;flex:none;align-self:center}
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
 .setrow:last-child{border-bottom:0}
 .setrow small{display:block;color:var(--mute);font-size:12px}
-.ok{color:var(--good);font-weight:600;font-size:13px}
-h2{font-size:15px;margin:0 0 4px}
-.favrow{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.favrow img{width:44px;height:58px;border-radius:6px;object-fit:cover;background:var(--line);flex:none}
-.favrow .ft{flex:1;min-width:0;font-size:13px}.favrow .ft small{display:block;color:var(--mute)}
-.favrow input{width:20px;height:20px;flex:none}
-.cardp{font-size:13px;color:var(--acc);font-weight:600;margin-top:2px}
+.setrow input{width:22px;height:22px}
+.ok{color:var(--good);font-weight:600;font-size:13px;white-space:nowrap}
+h2{font-size:15px;margin:0 0 6px}
 textarea{width:100%;height:120px;font:11px/1.3 monospace;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);padding:8px;margin-top:8px}
-.note{color:var(--mute);font-size:12.5px;margin:4px 0 10px}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .ver{color:var(--mute);font-size:12px;text-align:center;margin-top:14px}
-</style></head><body><div class="wrap">
-<h1>Uzum Монитор цен</h1>
-<div class="sub">Проверка каждые полчаса — в :00 и :30. Уведомление, если изменилась цена, наличие или количество.</div>
-<form id="f"><input id="u" type="text" required placeholder="Ссылка на товар uzum.uz" autocomplete="off">
-<button id="addb">Добавить</button></form>
+.fab{position:fixed;right:16px;bottom:84px;width:56px;height:56px;border-radius:28px;border:0;background:var(--acc);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(112,0,255,.35);z-index:6}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:6px;z-index:6}
+nav button{flex:1;height:60px;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--mute);font-size:11px;font-weight:500;position:relative;padding:0}
+nav button.on{color:var(--acc);font-weight:600}
+nav .badge{position:absolute;top:5px;left:50%;margin-left:6px;min-width:18px;height:18px;border-radius:9px;background:var(--acc);color:var(--acc-ink);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10;display:flex;align-items:flex-end}
+.scrim[hidden]{display:none}
+.sheet{background:var(--card);width:100%;border-radius:20px 20px 0 0;padding:18px 16px 22px}
+.sheet h2{font-size:17px;margin-bottom:10px}
+.sheet input[type=text]{width:100%;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit}
+.sheet input[type=text]:focus{outline:2px solid var(--acc);outline-offset:1px}
+.msg{min-height:18px;font-size:13px;color:var(--bad);margin:6px 0}
+.item{display:flex;align-items:center;width:100%;min-height:50px;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;font-size:15px;padding:0 2px}
+.item:last-child{border-bottom:0}
+.item.danger{color:var(--bad)}
+</style></head><body>
+<header><h1 id="title">Товары</h1>
+<button class="login" id="login" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path></svg>Войти в Uzum</button></header>
+<main id="view"></main>
+<button class="fab" id="fab" type="button" aria-label="Добавить товар"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
+<nav id="nav">
+<button type="button" data-tab="products"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>Товары</button>
+<button type="button" data-tab="changes"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"></path><path d="M15 7h6v6"></path></svg>Изменения<span class="badge" id="badge" hidden></span></button>
+<button type="button" data-tab="favorites"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"></path></svg>Избранное</button>
+<button type="button" data-tab="settings"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"></path></svg>Настройки</button>
+</nav>
+<div class="scrim" id="addsheet" hidden><div class="sheet"><h2>Добавить товар</h2>
+<form id="f"><input id="u" type="text" placeholder="Ссылка на товар uzum.uz" autocomplete="off" aria-label="Ссылка на товар">
 <div class="msg" id="msg"></div>
-<div class="bar"><span id="status"></span><button class="ghost" id="all">Проверить все</button></div>
-<div id="list"></div>
-<div class="card" id="account"></div>
-<div class="card" id="settings"></div>
-<div class="ver" id="ver"></div>
-</div>
+<div class="acts"><button class="primary" type="submit">Добавить</button><button class="ghost" type="button" id="addclose">Отмена</button></div></form>
+<p class="note" style="margin-top:12px">Ещё можно нажать «Поделиться» на странице товара и выбрать «Uzum Монитор» или отметить товары во вкладке «Избранное».</p></div></div>
+<div class="scrim" id="menu" hidden><div class="sheet" id="menubody"></div></div>
 <script>
 const $=s=>document.querySelector(s);
 // Вне приложения (обычный браузер) подставляются пустые данные, чтобы страницу можно было открыть для просмотра.
 const A=window.Android||{getState:()=>JSON.stringify({products:[],busy:false,pending:[],next_run:0,now:Math.floor(Date.now()/1000),info:{}}),
   getHistory:()=>'{"checks":[]}',addProduct:()=>'{"error":"Доступно только в приложении"}',deleteProduct(){},check(){},setPref(){},openSettings(){}};
 const call=(m,...a)=>{ try{ const r=A[m](...a); return typeof r==='string'&&r?JSON.parse(r):r; }catch(e){ return {error:String(e)}; } };
-const money=n=>n==null?'—':String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' ')+' сум';
-const dt=t=>t?new Date(t*1000).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
-const hm=t=>new Date(t*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let open={}, hist={}, onlyChanges={}, lastKey='';
-function chart(rows){
-  const pts=rows.filter(r=>r.price!=null); if(pts.length<1) return '';
-  const W=700,H=150,L=74,R=10,T=10,B=22;
-  let lo=Math.min(...pts.map(p=>p.price)), hi=Math.max(...pts.map(p=>p.price));
-  if(lo===hi){lo=lo*0.97;hi=hi*1.03}
-  const pad=(hi-lo)*0.12; lo-=pad; hi+=pad;
-  const t0=pts[0].ts, t1=Math.max(pts[pts.length-1].ts, t0+1800);
-  const x=t=>L+(t-t0)/(t1-t0)*(W-L-R), y=p=>T+(hi-p)/(hi-lo)*(H-T-B);
-  let d='', prev=null;
-  for(const p of pts){ d+= prev?` H${x(p.ts).toFixed(1)} V${y(p.price).toFixed(1)}`:`M${x(p.ts).toFixed(1)} ${y(p.price).toFixed(1)}`; prev=p; }
-  d+=` H${x(t1).toFixed(1)}`;
-  let off='';
-  for(let i=0;i<rows.length;i++){ if(!rows[i].in_stock){ const a=x(rows[i].ts), b=x(i+1<rows.length?rows[i+1].ts:t1);
-    off+=`<rect x="${a.toFixed(1)}" y="${T}" width="${Math.max(1,b-a).toFixed(1)}" height="${H-T-B}" fill="var(--bad)" opacity=".10"/>`; } }
-  const ticks=[hi-pad,(hi+lo)/2,lo+pad].map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text class="axis" x="${L-6}" y="${y(v)+4}" text-anchor="end">${money(v).replace(' сум','')}</text>`).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="График цены">${ticks}${off}<path d="${d}" fill="none" stroke="var(--acc)" stroke-width="2" vector-effect="non-scaling-stroke"/>
-  <text class="axis" x="${L}" y="${H-5}">${esc(dt(t0))}</text><text class="axis" x="${W-R}" y="${H-5}" text-anchor="end">${esc(dt(pts[pts.length-1].ts))}</text></svg>`;
-}
-function histHtml(id){
-  const h=hist[id]; if(!h) return '<div class="hist">Загрузка…</div>';
-  const all=h.checks, only=onlyChanges[id]!==false;
-  const rows=(only?all.filter(r=>r.event):all).slice().reverse().slice(0,200);
-  return `<div class="hist">${chart(all)}
-  <div class="toggle"><label><input type="checkbox" data-only="${id}" ${only?'checked':''}> только изменения</label><span>проверок: ${all.length}</span></div>
-  <div class="tblwrap"><table><tr><th>Дата</th><th>Цена</th><th>Кол-во</th><th>Событие</th></tr>
-  ${rows.map(r=>`<tr><td>${dt(r.ts)}</td><td class="n">${money(r.price)}</td><td class="n">${r.in_stock?(r.stock!=null?r.stock+' шт':'есть'):'нет'}</td><td class="ev">${esc(r.event||'без изменений')}</td></tr>`).join('')||'<tr><td colspan="4">Пока нет записей</td></tr>'}
-  </table></div></div>`;
-}
-function card(p){
-  const hasData=!!p.last_ok;
-  let delta='';
-  if(hasData&&p.first_price&&p.price&&p.first_price!==p.price){ const pc=(p.price-p.first_price)/p.first_price*100;
-    delta=`<span class="delta ${pc<0?'down':'up'}">${pc>0?'+':''}${pc.toFixed(1)}% с начала</span>`; }
-  const tags=[];
-  if(p.pending) tags.push('<span class="tag warn">проверяется…</span>');
-  if(hasData){ if(p.status!=='not_found') tags.push(p.in_stock?`<span class="tag good">в наличии${p.stock?': '+p.stock+' шт':''}</span>`:'<span class="tag bad">нет в наличии</span>');
-    if(p.min_price!=null&&p.min_price!==p.max_price) tags.push(`<span class="tag">мин ${money(p.min_price)} · макс ${money(p.max_price)}</span>`);
-    tags.push(`<span class="tag">проверено ${dt(p.last_ok)}</span>`); }
-  if(p.status==='not_found') tags.push('<span class="tag bad">страница не найдена</span>');
-  return `<div class="card"><div class="top">
-  ${p.image?`<img class="pic" src="${esc(p.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="pic"></div>'}
-  <div class="info"><a class="name" href="${esc(p.url)}">${esc(p.name||p.url)}</a>
-  ${p.seller?`<div class="seller">${esc(p.seller)}${p.variant?' · '+esc(p.variant):''}</div>`:''}
-  ${hasData?`<div class="prices"><span class="price">${money(p.price)}</span>${p.old_price?`<span class="old">${money(p.old_price)}</span><span class="delta down">−${Math.round((1-p.price/p.old_price)*100)}%</span>`:''}${delta}</div>`:''}
-  ${hasData&&p.card_price?`<div class="cardp">${money(p.card_price)} с картой Uzum</div>`:''}
-  <div class="tags">${tags.join('')}</div></div></div>
-  ${p.error?`<div class="err">Проверка ${dt(p.last_try)} не удалась: ${esc(p.error)}${hasData?' Показаны данные прошлой успешной проверки.':''}</div>`:''}
-  ${p.warning?`<div class="warnline">${esc(p.warning)}</div>`:''}
-  <div class="acts"><button class="ghost" data-h="${p.id}">${open[p.id]?'Скрыть историю':'История'}</button>
-  <button class="ghost" data-c="${p.id}" ${p.pending?'disabled':''}>Проверить</button>
-  <button class="ghost" data-d="${p.id}">Удалить</button></div>
-  ${open[p.id]?histHtml(p.id):''}</div>`;
-}
-function settings(i){
-  const row=(title,sub,ok,key,btn)=>`<div class="setrow"><div>${title}<small>${sub}</small></div>${ok?'<span class="ok">включено</span>':`<button class="ghost" data-s="${key}">${btn}</button>`}</div>`;
-  return `<h2>Настройки</h2>
-  ${row('Уведомления','Без разрешения приложение не сможет сообщать об изменениях',i.notif,'notifications','Разрешить')}
-  ${row('Работа в фоне','Отключите экономию батареи для приложения, иначе телефон будет пропускать проверки',i.battery,'battery','Настроить')}
-  ${row('Точное время проверок','Нужно, чтобы проверки шли ровно в :00 и :30',i.exact,'alarms','Разрешить')}
-  <div class="setrow"><div>Сообщать об изменении количества<small>Если выключить — только цена и наличие</small></div><input type="checkbox" id="ns" ${i.notify_stock?'checked':''}></div>`;
-}
-// ───── аккаунт Uzum, избранное, диагностика ─────
 const CAN=!!(window.Android&&typeof Android.runOnPage==='function');
 const WISHES='https://uzum.uz/ru/wishes';
-let fav=null, favMsg='', diag='', waiters={}, lastState=null;
+const APK='https://github.com/Mozlan/uzum-monitor/releases/latest/download/uzum-monitor.apk';
+const money=n=>n==null?'—':String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' ')+' сум';
+const num=n=>String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+const dt=t=>t?new Date(t*1000).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+const hm=t=>new Date(t*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+const when=t=>{ if(!t) return '—'; const d=new Date(t*1000), n=new Date(); return d.toDateString()===n.toDateString()?'в '+hm(t):dt(t); };
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store={get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch(e){ return d; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }};
+const TITLES={products:'Товары',changes:'Изменения',favorites:'Избранное',settings:'Настройки'};
+let tab='products', filter='all', open={}, hist={}, onlyChanges={}, lastKey='', S=null;
+let fav=null, favMsg='', favSel={}, diag='', waiters={}, menuId=null, menuSure=false;
+let seenTs=Number(store.get('seenTs',0));
+
 window.onPageResult=(token,result)=>{ const w=waiters[token]; delete waiters[token]; if(w) w(result); };
 function runOnPage(url,fn,cb){ const t='t'+Date.now()+Math.random(); waiters[t]=cb; Android.runOnPage(url,'('+fn.toString()+')()',t); }
 function favScript(){
@@ -177,65 +153,181 @@ function diagScript(){
   const out={title:document.title, w:innerWidth, ids:[...new Set([...document.querySelectorAll('[data-test-id]')].map(e=>e.getAttribute('data-test-id')).filter(s=>!/^product-card/.test(s)))].join(' ')};
   let box=pe; for(let i=0;i<3&&box&&box.parentElement;i++) box=box.parentElement;
   out.priceBlock=clean(box).slice(0,3500);
-  out.card=[...document.querySelectorAll('span,div,p')].filter(e=>e.children.length<=2&&/с картой|karta/i.test(e.textContent||'')&&(e.textContent||'').length<60&&!e.closest('[data-test-id^="product-card"]')).slice(0,3).map(e=>clean(e.parentElement&&e.parentElement.parentElement||e).slice(0,1500));
+  out.card=[...document.querySelectorAll('span,div,p')].filter(e=>e.children.length<=2&&/с картой|без карты|karta/i.test(e.textContent||'')&&(e.textContent||'').length<60&&!e.closest('[data-test-id^="product-card"]')).slice(0,3).map(e=>clean(e.parentElement&&e.parentElement.parentElement||e).slice(0,1500));
   return JSON.stringify(out);
 }
 const pkey=u=>{ const m=u.match(/\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#]|$)/), s=u.match(/[?&]skuId=(\d+)/); return m?m[1]+':'+(s?s[1]:'0'):u; };
-function account(s){
-  if(!CAN) return `<h2>Аккаунт Uzum</h2><div class="note">Вход в Uzum, избранное и цена с картой доступны в новой версии приложения.</div>
-  <a href="https://github.com/Mozlan/uzum-monitor/releases/latest/download/uzum-monitor.apk"><button class="ghost">Скачать новую версию</button></a>`;
-  const have={}; s.products.forEach(p=>have[p.product_id+':'+(p.sku_id||0)]=1);
-  let favHtml='';
-  if(fav==='loading') favHtml='<div class="note">Читаю избранное…</div>';
-  else if(fav){ favHtml=fav.length?fav.map((f,i)=>{ const got=have[pkey(f.url)];
-      return `<label class="favrow">${f.image?`<img src="${esc(f.image)}" referrerpolicy="no-referrer" loading="lazy" alt="">`:'<img alt="">'}<span class="ft">${esc(f.title||f.url)}<small>${got?'уже отслеживается':esc(f.price)}</small></span><input type="checkbox" data-f="${i}" ${got?'disabled checked':''}></label>`; }).join('')
-      +'<div class="acts"><button id="favadd">Добавить выбранные</button><button class="ghost" id="favclose">Закрыть</button></div>':''; }
-  return `<h2>Аккаунт Uzum</h2>
-  <div class="note">После входа монитор видит ваши цены (включая цену с картой Uzum) и избранное. Номер и код вы вводите на сайте Uzum — приложение их не видит.</div>
-  <div class="acts"><button class="ghost" id="login">Войти в Uzum</button><button class="ghost" id="favload">Добавить из избранного</button>${s.products.length?'<button class="ghost" id="diagb">Диагностика</button>':''}</div>
-  ${favMsg?`<div class="note" style="margin-top:8px">${esc(favMsg)}</div>`:''}${favHtml}
-  ${diag?`<textarea readonly id="diagt">${esc(diag)}</textarea><div class="acts"><button class="ghost" id="diagcopy">Скопировать</button><button class="ghost" id="diagclose">Закрыть</button></div>`:''}`;
+
+function stepPath(pts,x,y){ let d='',prev=null; for(const p of pts){ d+=prev?` H${x(p.ts).toFixed(1)} V${y(p.price).toFixed(1)}`:`M${x(p.ts).toFixed(1)} ${y(p.price).toFixed(1)}`; prev=p; } return d; }
+function spark(rows){
+  const pts=(rows||[]).filter(r=>r.price!=null).slice(-48); if(!pts.length) return '';
+  const W=84,H=36,P=4; let lo=Math.min(...pts.map(p=>p.price)), hi=Math.max(...pts.map(p=>p.price));
+  const t0=pts[0].ts, t1=Math.max(pts[pts.length-1].ts,t0+1);
+  const x=t=>P+(t-t0)/(t1-t0)*(W-2*P-10), y=p=>hi===lo?H/2:P+(hi-p)/(hi-lo)*(H-2*P);
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="График цены" fill="none" stroke="var(--acc)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${stepPath(pts,x,y)} H${W-P}"></path></svg>`;
+}
+function chart(rows){
+  const pts=rows.filter(r=>r.price!=null); if(pts.length<1) return '';
+  const W=700,H=150,L=74,R=10,T=10,B=22;
+  let lo=Math.min(...pts.map(p=>p.price)), hi=Math.max(...pts.map(p=>p.price));
+  if(lo===hi){lo=lo*0.97;hi=hi*1.03}
+  const pad=(hi-lo)*0.12; lo-=pad; hi+=pad;
+  const t0=pts[0].ts, t1=Math.max(pts[pts.length-1].ts, t0+1800);
+  const x=t=>L+(t-t0)/(t1-t0)*(W-L-R), y=p=>T+(hi-p)/(hi-lo)*(H-T-B);
+  let off='';
+  for(let i=0;i<rows.length;i++){ if(!rows[i].in_stock){ const a=x(rows[i].ts), b=x(i+1<rows.length?rows[i+1].ts:t1);
+    off+=`<rect x="${a.toFixed(1)}" y="${T}" width="${Math.max(1,b-a).toFixed(1)}" height="${H-T-B}" fill="var(--bad)" opacity=".10"/>`; } }
+  const ticks=[hi-pad,(hi+lo)/2,lo+pad].map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text class="axis" x="${L-6}" y="${y(v)+4}" text-anchor="end">${num(v)}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="График цены">${ticks}${off}<path d="${stepPath(pts,x,y)} H${x(t1).toFixed(1)}" fill="none" stroke="var(--acc)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+  <text class="axis" x="${L}" y="${H-5}">${esc(dt(t0))}</text><text class="axis" x="${W-R}" y="${H-5}" text-anchor="end">${esc(dt(pts[pts.length-1].ts))}</text></svg>`;
+}
+function histHtml(id){
+  const h=hist[id]; if(!h) return '';
+  const all=h.checks, only=onlyChanges[id]!==false;
+  const rows=(only?all.filter(r=>r.event):all).slice().reverse().slice(0,200);
+  return `<div class="hist">${chart(all)}
+  <div class="toggle"><label><input type="checkbox" data-only="${id}" ${only?'checked':''}> только изменения</label><span>проверок: ${all.length}</span></div>
+  <div class="tblwrap"><table><tr><th>Дата</th><th>Цена</th><th>Кол-во</th><th>Событие</th></tr>
+  ${rows.map(r=>`<tr><td>${dt(r.ts)}</td><td class="n">${money(r.price)}</td><td class="n">${r.in_stock?(r.stock!=null?r.stock+' шт':'есть'):'нет'}</td><td class="ev">${esc(r.event||'без изменений')}</td></tr>`).join('')||'<tr><td colspan="4">Пока нет записей</td></tr>'}
+  </table></div></div>`;
+}
+const cheaper=p=>p.last_ok&&p.first_price&&p.price&&p.price<p.first_price;
+const outOf=p=>p.last_ok&&(!p.in_stock||p.status==='not_found');
+function card(p){
+  const has=!!p.last_ok, tags=[];
+  if(p.pending) tags.push('<span class="tag warn">проверяется…</span>');
+  if(p.status==='not_found') tags.push('<span class="tag bad">страница не найдена</span>');
+  else if(has) tags.push(p.in_stock?`<span class="tag good">в наличии${p.stock!=null?': '+p.stock+' шт':''}</span>`:'<span class="tag bad">нет в наличии</span>');
+  if(has&&p.first_price&&p.price&&p.first_price!==p.price){ const pc=(p.price-p.first_price)/p.first_price*100;
+    tags.push(`<span class="tag ${pc<0?'good':'bad'}">${pc<0?'↓':'↑'} ${Math.abs(pc).toFixed(1).replace('.',',')}% с начала</span>`); }
+  const sub=[p.seller,p.variant].filter(Boolean).map(esc).join(' · ');
+  return `<article class="card"><div class="top" data-open="${p.id}">
+  ${p.image?`<img class="pic" src="${esc(p.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="pic"></div>'}
+  <div class="info"><div class="nrow"><div class="name">${esc(p.name||p.url)}</div>
+  <button class="more" type="button" data-menu="${p.id}" aria-label="Действия с товаром"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></button></div>
+  ${sub?`<div class="sub">${sub}</div>`:''}
+  ${has?`<div class="prow"><div class="pcol"><div class="price">${money(p.price)}</div>
+  ${p.card_price?`<div class="cardp">${money(p.card_price)} с картой Uzum</div>`:''}
+  ${p.old_price?`<div class="oldl"><s>${num(p.old_price)}</s> · скидка ${Math.round((1-p.price/p.old_price)*100)}%</div>`:''}</div>${spark(hist[p.id]&&hist[p.id].checks)}</div>`:''}
+  </div></div>
+  <div class="tags">${tags.join('')}${has?`<span class="when">проверено ${when(p.last_ok)}</span>`:''}</div>
+  ${p.error?`<div class="err">Проверка ${when(p.last_try)} не удалась: ${esc(p.error)}${has?' Показаны прошлые данные.':''}</div>`:''}
+  ${p.warning?`<div class="warnline">${esc(p.warning)}</div>`:''}
+  ${open[p.id]?histHtml(p.id):''}</article>`;
+}
+function events(){
+  const out=[]; for(const p of S.products){ const h=hist[p.id]; if(!h) continue;
+    for(const r of h.checks) if(r.event&&r.event!=='Начало наблюдения') out.push({ts:r.ts,text:r.event,p}); }
+  return out.sort((a,b)=>b.ts-a.ts);
+}
+function viewProducts(){
+  const ps=S.products, n=ps.length;
+  const list=filter==='cheaper'?ps.filter(cheaper):filter==='out'?ps.filter(outOf):ps;
+  if(!n) return '<div class="empty">Пока ничего не отслеживается.<br><br>Нажмите «+», чтобы добавить товар по ссылке, или выберите товары во вкладке «Избранное».</div>';
+  return `<div class="status"><span>${S.busy?'Идёт проверка…':'Следующая проверка в '+hm(S.next_run)}</span><button class="ghost" type="button" id="all" ${S.busy?'disabled':''}>Проверить все</button></div>
+  <div class="chips"><button type="button" class="chip ${filter==='all'?'on':''}" data-filter="all">Все · ${n}</button><button type="button" class="chip ${filter==='cheaper'?'on':''}" data-filter="cheaper">Подешевели · ${ps.filter(cheaper).length}</button><button type="button" class="chip ${filter==='out'?'on':''}" data-filter="out">Нет в наличии · ${ps.filter(outOf).length}</button></div>
+  ${list.map(card).join('')||'<div class="empty">В этом фильтре пока пусто.</div>'}`;
+}
+function viewChanges(){
+  const ev=events().slice(0,150);
+  if(!ev.length) return '<div class="empty">Изменений пока нет.<br><br>Здесь появится лента: когда и у какого товара поменялась цена, наличие или количество.</div>';
+  return '<div class="card">'+ev.map(e=>`<div class="feed">${e.p.image?`<img src="${esc(e.p.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<div class="ft"><b>${esc(e.p.name)}</b>${esc(e.text)}<br><small>${dt(e.ts)}</small></div></div>`).join('')+'</div>';
+}
+function viewFavorites(){
+  if(!CAN) return `<div class="card"><p class="note">Избранное Uzum доступно в новой версии приложения.</p><a href="${APK}"><button class="ghost" type="button">Скачать новую версию</button></a></div>`;
+  const have={}; S.products.forEach(p=>have[p.product_id+':'+(p.sku_id||0)]=1);
+  let body='';
+  if(fav==='loading') body='<div class="empty">Читаю избранное…</div>';
+  else if(fav&&fav.length){ const n=Object.keys(favSel).filter(k=>favSel[k]).length;
+    body='<div class="card">'+fav.map((f,i)=>{ const got=have[pkey(f.url)];
+      return `<label class="feed">${f.image?`<img src="${esc(f.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<span class="ft"><b>${esc(f.title||f.url)}</b><small>${got?'уже отслеживается':esc(f.price)}</small></span><input type="checkbox" data-f="${i}" ${got?'disabled checked':(favSel[i]?'checked':'')}></label>`; }).join('')+'</div>'
+      +`<div class="acts"><button class="primary" type="button" id="favadd" ${n?'':'disabled style="opacity:.5"'}>Следить за выбранными${n?' · '+n:''}</button></div>`; }
+  return `<p class="note">Товары из вашего избранного на Uzum. Отметьте те, за которыми нужно следить.</p>
+  <div class="acts" style="margin:0 0 12px"><button class="ghost" type="button" id="favload">${fav&&fav!=='loading'?'Обновить список':'Показать избранное'}</button></div>
+  ${favMsg?`<p class="note">${esc(favMsg)}</p>`:''}${body}`;
+}
+function viewSettings(){
+  const i=S.info||{};
+  const row=(title,sub,ok,key,btn)=>`<div class="setrow"><div>${title}<small>${sub}</small></div>${ok?'<span class="ok">включено</span>':`<button class="ghost" type="button" data-s="${key}">${btn}</button>`}</div>`;
+  return `<div class="card"><h2>Разрешения</h2>
+  ${row('Уведомления','Без разрешения приложение не сможет сообщать об изменениях',i.notif,'notifications','Разрешить')}
+  ${row('Работа в фоне','Отключите экономию батареи, иначе телефон будет пропускать проверки',i.battery,'battery','Настроить')}
+  ${row('Точное время проверок','Чтобы проверки шли ровно в :00 и :30',i.exact,'alarms','Разрешить')}</div>
+  <div class="card"><h2>Уведомления</h2>
+  <div class="setrow"><div>Сообщать об изменении количества<small>Если выключить — только цена и наличие</small></div><input type="checkbox" id="ns" aria-label="Сообщать об изменении количества" ${i.notify_stock?'checked':''}></div></div>
+  <div class="card"><h2>Аккаунт Uzum</h2><p class="note">После входа монитор видит ваши цены и избранное. Номер и код вы вводите на сайте Uzum — приложение их не видит.</p>
+  <div class="acts"><button class="ghost" type="button" id="login2">Войти в Uzum</button>${CAN&&S.products.length?'<button class="ghost" type="button" id="diagb">Диагностика</button>':''}</div>
+  ${diag?`<textarea readonly aria-label="Данные диагностики">${esc(diag)}</textarea><div class="acts"><button class="ghost" type="button" id="diagcopy">Скопировать</button><button class="ghost" type="button" id="diagclose">Закрыть</button></div>`:''}</div>
+  <div class="ver">Приложение ${esc(i.app||'—')} · обновление №${esc(i.web||'—')}</div>`;
 }
 function loadHist(id){ hist[id]=call('getHistory',Number(id)); }
 function refresh(force){
-  const s=call('getState'); if(!s||s.error) return;
-  const i=s.info||{};
-  $('#status').textContent=s.busy?'Идёт проверка…':(s.products.length?`Товаров: ${s.products.length} · следующая проверка в ${hm(s.next_run)}`:'');
-  $('#all').style.display=s.products.length?'':'none'; $('#all').disabled=!!s.busy;
-  for(const p of s.products){ p.pending=s.pending.indexOf(p.id)>=0; if(open[p.id]&&(!hist[p.id]||hist[p.id].checks.length!==p.checks_count)) loadHist(p.id); }
-  lastState=s;
-  const key=JSON.stringify([s.products,open,onlyChanges,i,fav,favMsg,diag]);
+  const s=call('getState'); if(!s||s.error) return; S=s;
+  for(const p of s.products){ p.pending=s.pending.indexOf(p.id)>=0; if(!hist[p.id]||hist[p.id].checks.length!==p.checks_count) loadHist(p.id); }
+  const fresh=events().filter(e=>e.ts>seenTs).length;
+  if(tab==='changes'&&fresh){ seenTs=Math.floor(Date.now()/1000); store.set('seenTs',seenTs); }
+  const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,diag,fresh]);
   if(key===lastKey&&!force) return; lastKey=key;
-  $('#list').innerHTML=s.products.length?s.products.map(card).join(''):'<div class="empty">Пока ничего не отслеживается.<br>Вставьте ссылку на товар или нажмите «Поделиться» в приложении Uzum и выберите «Uzum Монитор».</div>';
-  $('#account').innerHTML=account(s);
-  $('#settings').innerHTML=settings(i);
-  $('#ver').textContent=`Приложение ${i.app||'—'} · обновление №${i.web||'—'}`;
+  $('#title').textContent=TITLES[tab];
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  const bd=$('#badge'); bd.hidden=!(fresh&&tab!=='changes'); bd.textContent=fresh>99?'99+':fresh;
+  $('#fab').style.display=tab==='products'?'':'none';
+  $('#view').innerHTML=tab==='products'?viewProducts():tab==='changes'?viewChanges():tab==='favorites'?viewFavorites():viewSettings();
 }
 window.refresh=refresh; window.onAppResume=()=>refresh(true);
+function login(){ if(CAN) Android.openUzum(WISHES); else location.href=APK; }
+function loadFav(){ fav='loading'; favMsg=''; favSel={}; refresh(true);
+  runOnPage(WISHES,favScript,r=>{ let d=null; try{ d=r&&JSON.parse(r); }catch(e){}
+    if(!d){ fav=null; favMsg='Не удалось открыть избранное. Проверьте интернет и попробуйте ещё раз.'; }
+    else if(!d.items.length){ fav=null; favMsg='Избранное пусто. Если товары там есть — сначала нажмите «Войти в Uzum» вверху.'; }
+    else { fav=d.items; }
+    refresh(true); }); }
+function openMenu(id){ menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
+function drawMenu(){ const p=S.products.find(x=>x.id===menuId); if(!p){ $('#menu').hidden=true; return; }
+  $('#menubody').innerHTML=`<h2>${esc(p.name||'Товар')}</h2>
+  <button class="item" type="button" data-act="check">Проверить сейчас</button>
+  <button class="item" type="button" data-act="hist">${open[p.id]?'Скрыть историю':'История и график'}</button>
+  <button class="item" type="button" data-act="site">Открыть на Uzum</button>
+  <button class="item danger" type="button" data-act="del">${menuSure?'Точно удалить вместе с историей?':'Удалить'}</button>`; }
+$('#login').addEventListener('click',login);
+$('#nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; tab=b.dataset.tab; window.scrollTo(0,0);
+  if(tab==='favorites'&&CAN&&!fav) loadFav(); else refresh(true); });
+$('#fab').addEventListener('click',()=>{ $('#msg').textContent=''; $('#addsheet').hidden=false; $('#u').focus(); });
+$('#addclose').addEventListener('click',()=>{ $('#addsheet').hidden=true; });
+$('#addsheet').addEventListener('click',e=>{ if(e.target.id==='addsheet') $('#addsheet').hidden=true; });
+$('#menu').addEventListener('click',e=>{ if(e.target.id==='menu'){ $('#menu').hidden=true; return; }
+  const b=e.target.closest('button'); if(!b) return; const p=S.products.find(x=>x.id===menuId); if(!p) return;
+  const a=b.dataset.act;
+  if(a==='del'&&!menuSure){ menuSure=true; drawMenu(); return; }
+  if(a==='check') call('check',p.id);
+  if(a==='hist') open[p.id]=!open[p.id];
+  if(a==='site') location.href=p.url;
+  if(a==='del') call('deleteProduct',p.id);
+  $('#menu').hidden=true; setTimeout(()=>refresh(true),200); });
 $('#f').addEventListener('submit',e=>{ e.preventDefault(); $('#msg').textContent='';
-  const r=call('addProduct',$('#u').value); if(r&&r.error){ $('#msg').textContent=r.error; } else { $('#u').value=''; } refresh(true); });
-$('#all').addEventListener('click',()=>{ call('check',0); setTimeout(()=>refresh(true),300); });
-$('#list').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return;
-  if(b.dataset.h){ const id=b.dataset.h; open[id]=!open[id]; if(open[id]) loadHist(id); refresh(true); }
-  if(b.dataset.c){ call('check',Number(b.dataset.c)); setTimeout(()=>refresh(true),300); }
-  if(b.dataset.d){ if(b.dataset.sure){ call('deleteProduct',Number(b.dataset.d)); refresh(true); } else { b.dataset.sure=1; b.textContent='Точно удалить?'; } } });
-$('#list').addEventListener('change',e=>{ const id=e.target.dataset.only; if(id){ onlyChanges[id]=e.target.checked; refresh(true); } });
-$('#settings').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b&&b.dataset.s) call('openSettings',b.dataset.s); });
-$('#settings').addEventListener('change',e=>{ if(e.target.id==='ns'){ call('setPref','notify_stock',e.target.checked?'1':'0'); refresh(true); } });
-$('#account').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return;
-  if(b.id==='login'){ Android.openUzum(WISHES); }
-  if(b.id==='favload'){ fav='loading'; favMsg=''; refresh(true);
-    runOnPage(WISHES,favScript,r=>{ let d=null; try{ d=r&&JSON.parse(r); }catch(e){}
-      if(!d){ fav=null; favMsg='Не удалось открыть избранное. Проверьте интернет и попробуйте ещё раз.'; }
-      else if(!d.items.length){ fav=null; favMsg='Избранное пусто. Если товары там есть — сначала нажмите «Войти в Uzum».'; }
-      else { fav=d.items; favMsg='Отметьте товары, за которыми следить:'; }
-      refresh(true); }); }
-  if(b.id==='favadd'){ let n=0; document.querySelectorAll('#account input[data-f]:checked:not(:disabled)').forEach(c=>{ const r=call('addProduct',fav[+c.dataset.f].url); if(r&&!r.error) n++; });
-    fav=null; favMsg=n?`Добавлено товаров: ${n}. Идёт первая проверка.`:'Ничего не выбрано.'; refresh(true); }
-  if(b.id==='favclose'){ fav=null; favMsg=''; refresh(true); }
-  if(b.id==='diagb'){ diag='Собираю данные…'; refresh(true);
-    runOnPage(lastState.products[0].url,diagScript,r=>{ diag=r||'Страница не ответила.'; refresh(true); }); }
-  if(b.id==='diagcopy'){ Android.copy(diag); b.textContent='Скопировано'; }
-  if(b.id==='diagclose'){ diag=''; refresh(true); } });
+  const r=call('addProduct',$('#u').value); if(r&&r.error){ $('#msg').textContent=r.error; return; }
+  $('#u').value=''; $('#addsheet').hidden=true; refresh(true); });
+$('#view').addEventListener('click',e=>{
+  const m=e.target.closest('[data-menu]'); if(m){ openMenu(Number(m.dataset.menu)); return; }
+  const b=e.target.closest('button');
+  if(b){
+    if(b.id==='all'){ call('check',0); setTimeout(()=>refresh(true),300); }
+    if(b.dataset.filter){ filter=b.dataset.filter; refresh(true); }
+    if(b.id==='favload') loadFav();
+    if(b.id==='favadd'){ let n=0; Object.keys(favSel).forEach(i=>{ if(favSel[i]&&fav[i]){ const r=call('addProduct',fav[i].url); if(r&&!r.error) n++; } });
+      favSel={}; favMsg=n?`Добавлено товаров: ${n}. Идёт первая проверка — смотрите вкладку «Товары».`:''; refresh(true); }
+    if(b.dataset.s) call('openSettings',b.dataset.s);
+    if(b.id==='login2') login();
+    if(b.id==='diagb'){ diag='Собираю данные…'; refresh(true); runOnPage(S.products[0].url,diagScript,r=>{ diag=r||'Страница не ответила.'; refresh(true); }); }
+    if(b.id==='diagcopy'){ Android.copy(diag); b.textContent='Скопировано'; }
+    if(b.id==='diagclose'){ diag=''; refresh(true); }
+    return;
+  }
+  if(e.target.closest('.hist')) return;
+  const o=e.target.closest('[data-open]'); if(o){ const id=o.dataset.open; open[id]=!open[id]; refresh(true); } });
+$('#view').addEventListener('change',e=>{ const t=e.target;
+  if(t.dataset.only){ onlyChanges[t.dataset.only]=t.checked; refresh(true); }
+  if(t.dataset.f){ favSel[t.dataset.f]=t.checked; refresh(true); }
+  if(t.id==='ns'){ call('setPref','notify_stock',t.checked?'1':'0'); refresh(true); } });
 refresh(true); setInterval(refresh,3000);
 </script></body></html>
