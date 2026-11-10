@@ -14,7 +14,14 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-app
 button{font:inherit;color:inherit}
 header{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;gap:8px;padding:14px 14px 8px}
 h1{margin:0;font-size:22px;font-weight:700;flex:1;letter-spacing:-.01em}
-.login{height:44px;border-radius:12px;border:0;background:var(--acc);color:var(--acc-ink);font-size:14px;font-weight:600;padding:0 14px;display:flex;align-items:center;gap:8px}
+.login{height:44px;border-radius:12px;border:0;background:var(--acc);color:var(--acc-ink);font-size:14px;font-weight:600;padding:0 14px;display:flex;align-items:center;gap:8px;max-width:58vw;flex:none}
+.login svg{flex:none}
+.login span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.login.in{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.bar{position:fixed;left:0;right:0;bottom:66px;z-index:6;display:flex;gap:8px;padding:10px 14px;background:var(--bg);border-top:1px solid var(--line)}
+.bar .primary{flex:1}
+.bar .primary:disabled{opacity:.5}
+.bar .ghost{height:48px;border-radius:12px;flex:none}
 main{padding:0 14px 170px}
 .status{display:flex;align-items:center;gap:8px;color:var(--mute);font-size:13px;margin-bottom:10px;min-height:36px}
 .status span{flex:1}
@@ -91,7 +98,7 @@ nav .badge{position:absolute;top:5px;left:50%;margin-left:6px;min-width:18px;hei
 .item.danger{color:var(--bad)}
 </style></head><body>
 <header><h1 id="title">Товары</h1>
-<button class="login" id="login" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path></svg>Войти в Uzum</button></header>
+<button class="login" id="login" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path></svg><span id="logintext">Войти в Uzum</span></button></header>
 <main id="view"></main>
 <button class="fab" id="fab" type="button" aria-label="Добавить товар"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
 <nav id="nav">
@@ -126,9 +133,32 @@ const TITLES={products:'Товары',changes:'Изменения',favorites:'И
 let tab='products', filter='all', open={}, hist={}, onlyChanges={}, lastKey='', S=null;
 let fav=null, favMsg='', favSel={}, diag='', waiters={}, menuId=null, menuSure=false;
 let seenTs=Number(store.get('seenTs',0));
+// Аккаунт Uzum: state 'in' — вход выполнен, 'out' — не выполнен, '' — пока не удалось определить
+let acct={state:'',name:'',ts:0,c:[]}, loginOpened=false;
+try{ acct=Object.assign(acct,JSON.parse(store.get('acct','{}'))); }catch(e){}
 
 window.onPageResult=(token,result)=>{ const w=waiters[token]; delete waiters[token]; if(w) w(result); };
-function runOnPage(url,fn,cb){ const t='t'+Date.now()+Math.random(); waiters[t]=cb; Android.runOnPage(url,'('+fn.toString()+')()',t); }
+function runOnPage(url,fn,cb){ const t='t'+Date.now()+Math.random(); waiters[t]=cb; Android.runOnPage(url,'window.__who='+who.toString()+';('+fn.toString()+')()',t); }
+// Выполняется на странице uzum.uz: по кнопке аккаунта в шапке сайта определяет, выполнен ли вход, и имя.
+function who(){
+  const txt=e=>(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim();
+  const c=[...document.querySelectorAll('[data-test-id]')].filter(e=>/auth|login|sign|cabinet|profile|account|user/i.test(e.getAttribute('data-test-id'))
+    &&!e.closest('[data-test-id^="product-card"]')&&(e.matches('a,button')||e.closest('a,button,header,nav')))
+    .map(e=>[e.getAttribute('data-test-id'),txt(e).slice(0,40)]);
+  const out=/^(войти|вход|войти в аккаунт|kirish|sign in|log in)$/i, generic=/^(кабинет|личный кабинет|профиль|мой профиль|аккаунт|kabinet|shaxsiy kabinet|profil)?$/i;
+  let state='', name='';
+  if(c.some(x=>out.test(x[1]))) state='out';
+  else{ const n=c.find(x=>!/auth|login|sign/i.test(x[0])&&!generic.test(x[1])&&x[1].length<=30); if(n){ state='in'; name=n[1]; } }
+  return {state,name,c:c.slice(0,15)};
+}
+function whoScript(){
+  const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
+  if(el<4||(document.readyState!=='complete'&&el<12)) return null;
+  const w=W.__who(); if(!w.state&&el<10) return null;
+  return JSON.stringify(w);
+}
+function setAcct(w){ if(!w) return; acct={state:w.state||'',name:w.name||'',ts:Date.now(),c:w.c||[]}; store.set('acct',JSON.stringify(acct)); refresh(true); }
+function checkAcct(){ if(!CAN) return; runOnPage(WISHES,whoScript,r=>{ try{ setAcct(r&&JSON.parse(r)); }catch(e){} }); }
 function favScript(){
   const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
   if(document.readyState!=='complete'&&el<12) return null;
@@ -144,7 +174,7 @@ function favScript(){
     const url=new URL(a.getAttribute('href'),location.origin).href; if(seen[url]) continue; seen[url]=1;
     const img=c.querySelector('img');
     items.push({url, title:txt(c.querySelector('[data-test-id="product-card__title"]')), price:txt(c.querySelector('[data-test-id="product-card__actual-price"]')), image:img?(img.getAttribute('src')||''):''}); }
-  return JSON.stringify({items, empty});
+  return JSON.stringify({items, empty, who:W.__who?W.__who():null});
 }
 function diagScript(){
   const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
@@ -155,6 +185,7 @@ function diagScript(){
   let box=pe; for(let i=0;i<3&&box&&box.parentElement;i++) box=box.parentElement;
   out.priceBlock=clean(box).slice(0,3500);
   out.card=[...document.querySelectorAll('span,div,p')].filter(e=>e.children.length<=2&&/с картой|без карты|karta/i.test(e.textContent||'')&&(e.textContent||'').length<60&&!e.closest('[data-test-id^="product-card"]')).slice(0,3).map(e=>clean(e.parentElement&&e.parentElement.parentElement||e).slice(0,1500));
+  out.account=W.__who?W.__who():null;
   return JSON.stringify(out);
 }
 const pkey=u=>{ const m=u.match(/\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#]|$)/), s=u.match(/[?&]skuId=(\d+)/); return m?m[1]+':'+(s?s[1]:'0'):u; };
@@ -240,12 +271,15 @@ function viewFavorites(){
   const have={}; S.products.forEach(p=>have[p.product_id+':'+(p.sku_id||0)]=1);
   let body='';
   if(fav==='loading') body='<div class="empty">Читаю избранное…</div>';
-  else if(fav&&fav.length){ const n=Object.keys(favSel).filter(k=>favSel[k]).length;
+  let pick='';
+  if(fav&&fav!=='loading'&&fav.length){ const n=Object.keys(favSel).filter(k=>favSel[k]).length;
+    const free=fav.filter(f=>!have[pkey(f.url)]).length;
+    if(free) pick=`<button class="ghost" type="button" id="favall">${n>=free?'Снять выбор':'Выбрать все'}</button>`;
     body='<div class="card">'+fav.map((f,i)=>{ const got=have[pkey(f.url)];
       return `<label class="feed">${f.image?`<img src="${esc(f.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<span class="ft"><b>${esc(f.title||f.url)}</b><small>${got?'уже отслеживается':esc(f.price)}</small></span><input type="checkbox" data-f="${i}" ${got?'disabled checked':(favSel[i]?'checked':'')}></label>`; }).join('')+'</div>'
-      +`<div class="acts"><button class="primary" type="button" id="favadd" ${n?'':'disabled style="opacity:.5"'}>Следить за выбранными${n?' · '+n:''}</button></div>`; }
-  return `<p class="note">Товары из вашего избранного на Uzum. Отметьте те, за которыми нужно следить.</p>
-  <div class="acts" style="margin:0 0 12px"><button class="ghost" type="button" id="favload">${fav&&fav!=='loading'?'Обновить список':'Показать избранное'}</button></div>
+      +`<div class="bar"><button class="primary" type="button" id="favadd" ${n?'':'disabled'}>Применить${n?' · '+n:''}</button></div>`; }
+  return `<p class="note">Товары из вашего избранного на Uzum. Отметьте те, за которыми нужно следить, и нажмите «Применить».</p>
+  <div class="acts" style="margin:0 0 12px"><button class="ghost" type="button" id="favload">${fav&&fav!=='loading'?'Обновить список':'Показать избранное'}</button>${pick}</div>
   ${favMsg?`<p class="note">${esc(favMsg)}</p>`:''}${body}`;
 }
 function viewSettings(){
@@ -258,7 +292,8 @@ function viewSettings(){
   <div class="card"><h2>Уведомления</h2>
   <div class="setrow"><div>Сообщать об изменении количества<small>Если выключить — только цена и наличие</small></div><input type="checkbox" id="ns" aria-label="Сообщать об изменении количества" ${i.notify_stock?'checked':''}></div></div>
   <div class="card"><h2>Аккаунт Uzum</h2><p class="note">После входа монитор видит ваши цены и избранное. Номер и код вы вводите на сайте Uzum — приложение их не видит.</p>
-  <div class="acts"><button class="ghost" type="button" id="login2">Войти в Uzum</button>${CAN&&S.products.length?'<button class="ghost" type="button" id="diagb">Диагностика</button>':''}</div>
+  ${acct.state==='in'?`<p class="note"><span class="ok">Вход выполнен</span>${acct.name?' · '+esc(acct.name):''}</p>`:''}
+  <div class="acts"><button class="ghost" type="button" id="login2">${acct.state==='in'?'Открыть Uzum':'Войти в Uzum'}</button>${CAN&&S.products.length?'<button class="ghost" type="button" id="diagb">Диагностика</button>':''}</div>
   ${diag?`<textarea readonly aria-label="Данные диагностики">${esc(diag)}</textarea><div class="acts"><button class="ghost" type="button" id="diagcopy">Скопировать</button><button class="ghost" type="button" id="diagclose">Закрыть</button></div>`:''}</div>
   <div class="ver">Приложение ${esc(i.app||'—')} · обновление №${esc(i.web||'—')}</div>`;
 }
@@ -268,18 +303,23 @@ function refresh(force){
   for(const p of s.products){ p.pending=s.pending.indexOf(p.id)>=0; if(!hist[p.id]||hist[p.id].checks.length!==p.checks_count) loadHist(p.id); }
   const fresh=events().filter(e=>e.ts>seenTs).length;
   if(tab==='changes'&&fresh){ seenTs=Math.floor(Date.now()/1000); store.set('seenTs',seenTs); }
-  const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,diag,fresh]);
+  const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,diag,fresh,acct.state,acct.name]);
   if(key===lastKey&&!force) return; lastKey=key;
   $('#title').textContent=TITLES[tab];
+  const li=acct.state==='in'; $('#login').classList.toggle('in',li); $('#logintext').textContent=li?(acct.name||'Вы вошли'):'Войти в Uzum';
+  $('#login').setAttribute('aria-label',li?'Аккаунт Uzum: '+(acct.name||'вход выполнен'):'Войти в Uzum');
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const bd=$('#badge'); bd.hidden=!(fresh&&tab!=='changes'); bd.textContent=fresh>99?'99+':fresh;
   $('#fab').style.display=tab==='products'?'':'none';
   $('#view').innerHTML=tab==='products'?viewProducts():tab==='changes'?viewChanges():tab==='favorites'?viewFavorites():viewSettings();
 }
-window.refresh=refresh; window.onAppResume=()=>refresh(true);
-function login(){ if(CAN) Android.openUzum(WISHES); else location.href=APK; }
+window.refresh=refresh;
+// После возврата с экрана входа заново читаем избранное (или только аккаунт), чтобы кнопка в шапке обновилась
+window.onAppResume=()=>{ if(loginOpened){ loginOpened=false; if(tab==='favorites') loadFav(); else checkAcct(); } refresh(true); };
+function login(){ if(CAN){ loginOpened=true; Android.openUzum(WISHES); } else location.href=APK; }
 function loadFav(){ fav='loading'; favMsg=''; favSel={}; refresh(true);
   runOnPage(WISHES,favScript,r=>{ let d=null; try{ d=r&&JSON.parse(r); }catch(e){}
+    if(d&&d.who) setAcct(d.who);
     if(!d){ fav=null; favMsg='Не удалось открыть избранное. Проверьте интернет и попробуйте ещё раз.'; }
     else if(!d.items.length){ fav=null; favMsg='Избранное пусто. Если товары там есть — сначала нажмите «Войти в Uzum» вверху.'; }
     else { fav=d.items; }
@@ -316,6 +356,9 @@ $('#view').addEventListener('click',e=>{
     if(b.id==='all'){ call('check',0); setTimeout(()=>refresh(true),300); }
     if(b.dataset.filter){ filter=b.dataset.filter; refresh(true); }
     if(b.id==='favload') loadFav();
+    if(b.id==='favall'){ const have={}; S.products.forEach(p=>have[p.product_id+':'+(p.sku_id||0)]=1);
+      const free=fav.map((f,i)=>have[pkey(f.url)]?-1:i).filter(i=>i>=0), all=free.every(i=>favSel[i]);
+      favSel={}; if(!all) free.forEach(i=>favSel[i]=true); refresh(true); }
     if(b.id==='favadd'){ let n=0; Object.keys(favSel).forEach(i=>{ if(favSel[i]&&fav[i]){ const r=call('addProduct',fav[i].url); if(r&&!r.error) n++; } });
       favSel={}; favMsg=n?`Добавлено товаров: ${n}. Идёт первая проверка — смотрите вкладку «Товары».`:''; refresh(true); }
     if(b.dataset.s) call('openSettings',b.dataset.s);
@@ -332,4 +375,6 @@ $('#view').addEventListener('change',e=>{ const t=e.target;
   if(t.dataset.f){ favSel[t.dataset.f]=t.checked; refresh(true); }
   if(t.id==='ns'){ call('setPref','notify_stock',t.checked?'1':'0'); refresh(true); } });
 refresh(true); setInterval(refresh,3000);
+// Раз в 6 часов при запуске уточняем, выполнен ли вход в Uzum
+if(CAN&&Date.now()-(acct.ts||0)>6*3600*1000) setTimeout(checkAcct,2000);
 </script></body></html>
