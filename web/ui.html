@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Uzum Монитор цен</title>
+<style>
+:root{--bg:#f4f3f7;--card:#fff;--ink:#1f2026;--mute:#6f7280;--line:#e6e5ec;--acc:#7000ff;--acc-ink:#fff;
+--good:#0a8a4a;--good-bg:#e3f6ec;--bad:#c62828;--bad-bg:#fdeaea;--warn:#8a5a00;--warn-bg:#fff4d6}
+@media (prefers-color-scheme:dark){:root{--bg:#131318;--card:#1d1d25;--ink:#ecebf2;--mute:#9a9cab;--line:#2e2e3a;
+--acc:#9a5cff;--good:#4cd08a;--good-bg:#12331f;--bad:#ff7b7b;--bad-bg:#3a1717;--warn:#f0c060;--warn-bg:#3a2e10}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Roboto,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:18px 12px 60px}
+h1{font-size:21px;margin:0 0 2px;letter-spacing:-.01em}
+.sub{color:var(--mute);margin-bottom:14px;font-size:13px}
+form{display:flex;gap:8px;margin-bottom:6px}
+input[type=text]{flex:1;min-width:0;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font:inherit}
+input[type=text]:focus{outline:2px solid var(--acc);outline-offset:1px}
+button{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--acc);color:var(--acc-ink);font-weight:600}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500;padding:8px 12px;border-radius:10px;font-size:13px}
+button:disabled{opacity:.5}
+.msg{min-height:18px;font-size:13.5px;color:var(--bad);margin-bottom:8px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--mute);font-size:12.5px;margin:4px 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:12px}
+.top{display:flex;gap:12px}
+.pic{width:78px;height:104px;border-radius:10px;object-fit:cover;background:var(--line);flex:none}
+.info{flex:1;min-width:0}
+.name{font-weight:600;font-size:15px;color:var(--ink);text-decoration:none;display:block;overflow-wrap:anywhere}
+.seller{color:var(--mute);font-size:12.5px;margin-top:2px}
+.prices{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:8px}
+.price{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.old{color:var(--mute);text-decoration:line-through;font-variant-numeric:tabular-nums;font-size:13.5px}
+.delta{font-size:12px;font-weight:600;padding:2px 7px;border-radius:999px}
+.delta.down{background:var(--good-bg);color:var(--good)}.delta.up{background:var(--bad-bg);color:var(--bad)}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tag{font-size:12px;padding:3px 8px;border-radius:999px;background:var(--bg);color:var(--mute)}
+.tag.good{background:var(--good-bg);color:var(--good)}.tag.bad{background:var(--bad-bg);color:var(--bad)}.tag.warn{background:var(--warn-bg);color:var(--warn)}
+.err{margin-top:8px;font-size:12.5px;color:var(--bad)}
+.warnline{margin-top:8px;font-size:12.5px;color:var(--warn)}
+.acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.hist{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+svg{width:100%;height:150px;display:block}
+.axis{fill:var(--mute);font-size:11px}
+.tblwrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+th,td{text-align:left;padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.ev{white-space:normal;min-width:150px}
+th{color:var(--mute);font-weight:500}
+td.n{font-variant-numeric:tabular-nums}
+.empty{text-align:center;color:var(--mute);padding:36px 10px}
+.toggle{display:flex;gap:12px;align-items:center;font-size:12.5px;color:var(--mute);margin-top:6px}
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.setrow:last-child{border-bottom:0}
+.setrow small{display:block;color:var(--mute);font-size:12px}
+.ok{color:var(--good);font-weight:600;font-size:13px}
+h2{font-size:15px;margin:0 0 4px}
+.ver{color:var(--mute);font-size:12px;text-align:center;margin-top:14px}
+</style></head><body><div class="wrap">
+<h1>Uzum Монитор цен</h1>
+<div class="sub">Проверка каждые полчаса — в :00 и :30. Уведомление, если изменилась цена, наличие или количество.</div>
+<form id="f"><input id="u" type="text" required placeholder="Ссылка на товар uzum.uz" autocomplete="off">
+<button id="addb">Добавить</button></form>
+<div class="msg" id="msg"></div>
+<div class="bar"><span id="status"></span><button class="ghost" id="all">Проверить все</button></div>
+<div id="list"></div>
+<div class="card" id="settings"></div>
+<div class="ver" id="ver"></div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+// Вне приложения (обычный браузер) подставляются пустые данные, чтобы страницу можно было открыть для просмотра.
+const A=window.Android||{getState:()=>JSON.stringify({products:[],busy:false,pending:[],next_run:0,now:Math.floor(Date.now()/1000),info:{}}),
+  getHistory:()=>'{"checks":[]}',addProduct:()=>'{"error":"Доступно только в приложении"}',deleteProduct(){},check(){},setPref(){},openSettings(){}};
+const call=(m,...a)=>{ try{ const r=A[m](...a); return typeof r==='string'&&r?JSON.parse(r):r; }catch(e){ return {error:String(e)}; } };
+const money=n=>n==null?'—':String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' ')+' сум';
+const dt=t=>t?new Date(t*1000).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+const hm=t=>new Date(t*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let open={}, hist={}, onlyChanges={}, lastKey='';
+function chart(rows){
+  const pts=rows.filter(r=>r.price!=null); if(pts.length<1) return '';
+  const W=700,H=150,L=74,R=10,T=10,B=22;
+  let lo=Math.min(...pts.map(p=>p.price)), hi=Math.max(...pts.map(p=>p.price));
+  if(lo===hi){lo=lo*0.97;hi=hi*1.03}
+  const pad=(hi-lo)*0.12; lo-=pad; hi+=pad;
+  const t0=pts[0].ts, t1=Math.max(pts[pts.length-1].ts, t0+1800);
+  const x=t=>L+(t-t0)/(t1-t0)*(W-L-R), y=p=>T+(hi-p)/(hi-lo)*(H-T-B);
+  let d='', prev=null;
+  for(const p of pts){ d+= prev?` H${x(p.ts).toFixed(1)} V${y(p.price).toFixed(1)}`:`M${x(p.ts).toFixed(1)} ${y(p.price).toFixed(1)}`; prev=p; }
+  d+=` H${x(t1).toFixed(1)}`;
+  let off='';
+  for(let i=0;i<rows.length;i++){ if(!rows[i].in_stock){ const a=x(rows[i].ts), b=x(i+1<rows.length?rows[i+1].ts:t1);
+    off+=`<rect x="${a.toFixed(1)}" y="${T}" width="${Math.max(1,b-a).toFixed(1)}" height="${H-T-B}" fill="var(--bad)" opacity=".10"/>`; } }
+  const ticks=[hi-pad,(hi+lo)/2,lo+pad].map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text class="axis" x="${L-6}" y="${y(v)+4}" text-anchor="end">${money(v).replace(' сум','')}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="График цены">${ticks}${off}<path d="${d}" fill="none" stroke="var(--acc)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+  <text class="axis" x="${L}" y="${H-5}">${esc(dt(t0))}</text><text class="axis" x="${W-R}" y="${H-5}" text-anchor="end">${esc(dt(pts[pts.length-1].ts))}</text></svg>`;
+}
+function histHtml(id){
+  const h=hist[id]; if(!h) return '<div class="hist">Загрузка…</div>';
+  const all=h.checks, only=onlyChanges[id]!==false;
+  const rows=(only?all.filter(r=>r.event):all).slice().reverse().slice(0,200);
+  return `<div class="hist">${chart(all)}
+  <div class="toggle"><label><input type="checkbox" data-only="${id}" ${only?'checked':''}> только изменения</label><span>проверок: ${all.length}</span></div>
+  <div class="tblwrap"><table><tr><th>Дата</th><th>Цена</th><th>Кол-во</th><th>Событие</th></tr>
+  ${rows.map(r=>`<tr><td>${dt(r.ts)}</td><td class="n">${money(r.price)}</td><td class="n">${r.in_stock?(r.stock!=null?r.stock+' шт':'есть'):'нет'}</td><td class="ev">${esc(r.event||'без изменений')}</td></tr>`).join('')||'<tr><td colspan="4">Пока нет записей</td></tr>'}
+  </table></div></div>`;
+}
+function card(p){
+  const hasData=!!p.last_ok;
+  let delta='';
+  if(hasData&&p.first_price&&p.price&&p.first_price!==p.price){ const pc=(p.price-p.first_price)/p.first_price*100;
+    delta=`<span class="delta ${pc<0?'down':'up'}">${pc>0?'+':''}${pc.toFixed(1)}% с начала</span>`; }
+  const tags=[];
+  if(p.pending) tags.push('<span class="tag warn">проверяется…</span>');
+  if(hasData){ if(p.status!=='not_found') tags.push(p.in_stock?`<span class="tag good">в наличии${p.stock?': '+p.stock+' шт':''}</span>`:'<span class="tag bad">нет в наличии</span>');
+    if(p.min_price!=null&&p.min_price!==p.max_price) tags.push(`<span class="tag">мин ${money(p.min_price)} · макс ${money(p.max_price)}</span>`);
+    tags.push(`<span class="tag">проверено ${dt(p.last_ok)}</span>`); }
+  if(p.status==='not_found') tags.push('<span class="tag bad">страница не найдена</span>');
+  return `<div class="card"><div class="top">
+  ${p.image?`<img class="pic" src="${esc(p.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="pic"></div>'}
+  <div class="info"><a class="name" href="${esc(p.url)}">${esc(p.name||p.url)}</a>
+  ${p.seller?`<div class="seller">${esc(p.seller)}${p.variant?' · '+esc(p.variant):''}</div>`:''}
+  ${hasData?`<div class="prices"><span class="price">${money(p.price)}</span>${p.old_price?`<span class="old">${money(p.old_price)}</span><span class="delta down">−${Math.round((1-p.price/p.old_price)*100)}%</span>`:''}${delta}</div>`:''}
+  <div class="tags">${tags.join('')}</div></div></div>
+  ${p.error?`<div class="err">Проверка ${dt(p.last_try)} не удалась: ${esc(p.error)}${hasData?' Показаны данные прошлой успешной проверки.':''}</div>`:''}
+  ${p.warning?`<div class="warnline">${esc(p.warning)}</div>`:''}
+  <div class="acts"><button class="ghost" data-h="${p.id}">${open[p.id]?'Скрыть историю':'История'}</button>
+  <button class="ghost" data-c="${p.id}" ${p.pending?'disabled':''}>Проверить</button>
+  <button class="ghost" data-d="${p.id}">Удалить</button></div>
+  ${open[p.id]?histHtml(p.id):''}</div>`;
+}
+function settings(i){
+  const row=(title,sub,ok,key,btn)=>`<div class="setrow"><div>${title}<small>${sub}</small></div>${ok?'<span class="ok">включено</span>':`<button class="ghost" data-s="${key}">${btn}</button>`}</div>`;
+  return `<h2>Настройки</h2>
+  ${row('Уведомления','Без разрешения приложение не сможет сообщать об изменениях',i.notif,'notifications','Разрешить')}
+  ${row('Работа в фоне','Отключите экономию батареи для приложения, иначе телефон будет пропускать проверки',i.battery,'battery','Настроить')}
+  ${row('Точное время проверок','Нужно, чтобы проверки шли ровно в :00 и :30',i.exact,'alarms','Разрешить')}
+  <div class="setrow"><div>Сообщать об изменении количества<small>Если выключить — только цена и наличие</small></div><input type="checkbox" id="ns" ${i.notify_stock?'checked':''}></div>`;
+}
+function loadHist(id){ hist[id]=call('getHistory',Number(id)); }
+function refresh(force){
+  const s=call('getState'); if(!s||s.error) return;
+  const i=s.info||{};
+  $('#status').textContent=s.busy?'Идёт проверка…':(s.products.length?`Товаров: ${s.products.length} · следующая проверка в ${hm(s.next_run)}`:'');
+  $('#all').style.display=s.products.length?'':'none'; $('#all').disabled=!!s.busy;
+  for(const p of s.products){ p.pending=s.pending.indexOf(p.id)>=0; if(open[p.id]&&(!hist[p.id]||hist[p.id].checks.length!==p.checks_count)) loadHist(p.id); }
+  const key=JSON.stringify([s.products,open,onlyChanges,i]);
+  if(key===lastKey&&!force) return; lastKey=key;
+  $('#list').innerHTML=s.products.length?s.products.map(card).join(''):'<div class="empty">Пока ничего не отслеживается.<br>Вставьте ссылку на товар или нажмите «Поделиться» в приложении Uzum и выберите «Uzum Монитор».</div>';
+  $('#settings').innerHTML=settings(i);
+  $('#ver').textContent=`Приложение ${i.app||'—'} · обновление №${i.web||'—'}`;
+}
+window.refresh=refresh; window.onAppResume=()=>refresh(true);
+$('#f').addEventListener('submit',e=>{ e.preventDefault(); $('#msg').textContent='';
+  const r=call('addProduct',$('#u').value); if(r&&r.error){ $('#msg').textContent=r.error; } else { $('#u').value=''; } refresh(true); });
+$('#all').addEventListener('click',()=>{ call('check',0); setTimeout(()=>refresh(true),300); });
+$('#list').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.h){ const id=b.dataset.h; open[id]=!open[id]; if(open[id]) loadHist(id); refresh(true); }
+  if(b.dataset.c){ call('check',Number(b.dataset.c)); setTimeout(()=>refresh(true),300); }
+  if(b.dataset.d){ if(b.dataset.sure){ call('deleteProduct',Number(b.dataset.d)); refresh(true); } else { b.dataset.sure=1; b.textContent='Точно удалить?'; } } });
+$('#list').addEventListener('change',e=>{ const id=e.target.dataset.only; if(id){ onlyChanges[id]=e.target.checked; refresh(true); } });
+$('#settings').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b&&b.dataset.s) call('openSettings',b.dataset.s); });
+$('#settings').addEventListener('change',e=>{ if(e.target.id==='ns'){ call('setPref','notify_stock',e.target.checked?'1':'0'); refresh(true); } });
+refresh(true); setInterval(refresh,3000);
+</script></body></html>

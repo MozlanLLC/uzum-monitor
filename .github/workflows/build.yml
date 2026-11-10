@@ -1,0 +1,47 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build
+        run: gradle -p android :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk uzum-monitor.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uzum-monitor-apk
+          path: uzum-monitor.apk
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v1.0.${{ github.run_number }}" uzum-monitor.apk \
+            --title "Uzum Монитор 1.0.${{ github.run_number }}" \
+            --notes "Установочный файл: uzum-monitor.apk" \
+            --latest

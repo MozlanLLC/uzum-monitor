@@ -1,0 +1,59 @@
+plugins {
+    id 'com.android.application'
+}
+
+def repo = System.getenv('GITHUB_REPOSITORY') ?: 'Mozlan/uzum-monitor'
+def buildNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+def webAssets = layout.buildDirectory.dir('webassets')
+
+android {
+    namespace 'uz.pricewatch.monitor'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'uz.pricewatch.monitor'
+        minSdk 26
+        targetSdk 34
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+        // Откуда приложение берёт обновления интерфейса и логики (папка web/ репозитория)
+        buildConfigField 'String', 'UPDATE_BASE', "\"https://raw.githubusercontent.com/${repo}/main/web/\""
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    signingConfigs {
+        release {
+            storeFile file('keystore.jks')
+            storePassword 'uzum-monitor'
+            keyAlias 'app'
+            keyPassword 'uzum-monitor'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets {
+        main {
+            assets.srcDirs += [webAssets.get().asFile]
+        }
+    }
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
+
+// Копия папки web/ кладётся внутрь APK — приложение работает и до первого обновления
+tasks.register('copyWeb', Copy) {
+    from rootProject.file('../web')
+    into webAssets.map { it.dir('web') }
+}
+tasks.named('preBuild') { dependsOn 'copyWeb' }
