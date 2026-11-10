@@ -23,6 +23,10 @@ public class Updater {
 
     private static final Object LOCK = new Object();
 
+    /** Единственный адрес, с которого принимаются обновления: папка web/ ветки main этого репозитория. */
+    private static final String ALLOWED_BASE =
+            "https://raw.githubusercontent.com/MozlanLLC/uzum-monitor/main/web/";
+
     private static File dir(Context c) {
         return new File(c.getFilesDir(), "web");
     }
@@ -67,6 +71,7 @@ public class Updater {
     public static boolean sync(Context c) {
         try {
             String base = BuildConfig.UPDATE_BASE;
+            if (!ALLOWED_BASE.equals(base)) return false;
             String bust = "?t=" + (System.currentTimeMillis() / 60000);
             JSONObject man = new JSONObject(new String(download(base + "manifest.json" + bust), StandardCharsets.UTF_8));
             int version = man.optInt("version", 0);
@@ -102,7 +107,10 @@ public class Updater {
     }
 
     private static byte[] download(String url) throws IOException {
+        if (!url.startsWith(ALLOWED_BASE)) throw new IOException("Чужой адрес обновления");
         HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
+        // Переадресацию не принимаем: файл должен прийти именно с разрешённого адреса
+        con.setInstanceFollowRedirects(false);
         con.setConnectTimeout(7000);
         con.setReadTimeout(10000);
         con.setUseCaches(false);

@@ -114,7 +114,7 @@ const A=window.Android||{getState:()=>JSON.stringify({products:[],busy:false,pen
 const call=(m,...a)=>{ try{ const r=A[m](...a); return typeof r==='string'&&r?JSON.parse(r):r; }catch(e){ return {error:String(e)}; } };
 const CAN=!!(window.Android&&typeof Android.runOnPage==='function');
 const WISHES='https://uzum.uz/ru/wishes';
-const APK='https://github.com/Mozlan/uzum-monitor/releases/latest/download/uzum-monitor.apk';
+const APK='https://github.com/MozlanLLC/uzum-monitor/releases/latest/download/uzum-monitor.apk';
 const money=n=>n==null?'—':String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' ')+' сум';
 const num=n=>String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
 const dt=t=>t?new Date(t*1000).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';

@@ -8,14 +8,18 @@ on:
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
-permissions:
-  contents: write
+# По умолчанию — никаких прав; каждая задача получает только то, что ей нужно.
+permissions: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -26,8 +30,26 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Signing key from secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Не заданы секреты KEYSTORE_BASE64 и KEYSTORE_PASSWORD"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keystore.jks"
+
       - name: Build
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: gradle -p android :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/keystore.jks"
 
       - name: Rename APK
         run: cp android/app/build/outputs/apk/release/app-release.apk uzum-monitor.apk
@@ -36,12 +58,25 @@ jobs:
         with:
           name: uzum-monitor-apk
           path: uzum-monitor.apk
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # только для создания релиза
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: uzum-monitor-apk
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release create "v1.0.${{ github.run_number }}" uzum-monitor.apk \
+            --target "${{ github.sha }}" \
             --title "Uzum Монитор 1.0.${{ github.run_number }}" \
             --notes "Установочный файл: uzum-monitor.apk" \
             --latest
