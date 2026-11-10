@@ -2,7 +2,13 @@ plugins {
     id 'com.android.application'
 }
 
-def repo = System.getenv('GITHUB_REPOSITORY') ?: 'Mozlan/uzum-monitor'
+// Адрес репозитория задан жёстко: сборка из форка не должна менять источник обновлений.
+// Тот же адрес проверяется в Updater.java.
+def repo = 'MozlanLLC/uzum-monitor'
+// Ключ подписи в репозитории не хранится: в GitHub Actions он приходит из секретов.
+def keystoreFile = System.getenv('KEYSTORE_FILE')
+def keystorePassword = System.getenv('KEYSTORE_PASSWORD')
+def signed = keystoreFile && keystorePassword
 def buildNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
 def webAssets = layout.buildDirectory.dir('webassets')
 
@@ -23,17 +29,20 @@ android {
         buildConfig true
     }
     signingConfigs {
-        release {
-            storeFile file('keystore.jks')
-            storePassword 'uzum-monitor'
-            keyAlias 'app'
-            keyPassword 'uzum-monitor'
+        if (signed) {
+            release {
+                storeFile file(keystoreFile)
+                storePassword keystorePassword
+                keyAlias 'app'
+                keyPassword keystorePassword
+            }
         }
     }
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.release
+            // Без секретов получится неподписанный APK (для локальной проверки сборки)
+            if (signed) signingConfig signingConfigs.release
         }
     }
     compileOptions {

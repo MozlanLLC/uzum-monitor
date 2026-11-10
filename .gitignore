@@ -3,3 +3,5 @@ android/build/
 android/app/build/
 *.iml
 local.properties
+*.jks
+*.keystore
