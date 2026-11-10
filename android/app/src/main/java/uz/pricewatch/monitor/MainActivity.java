@@ -5,6 +5,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.WebResourceRequest;
@@ -15,9 +16,20 @@ import android.widget.Toast;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
 public class MainActivity extends Activity {
 
     private static final String UI_BASE = "https://app.uzum-monitor.invalid/";
+    private static final int REQ_EXPORT = 11;
+    private static final int REQ_IMPORT = 12;
+    private static final int MAX_BACKUP = 30 * 1024 * 1024;
     private WebView web;
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -103,6 +115,74 @@ public class MainActivity extends Activity {
         if (web == null) return;
         web.evaluateJavascript("window.onPageResult&&window.onPageResult(" + JSONObject.quote(token) + ","
                 + (result == null ? "null" : JSONObject.quote(result)) + ")", null);
+    }
+
+    /** Резервная копия: системное окно выбора файла — куда сохранить или откуда загрузить. */
+    void pickFile(boolean export) {
+        try {
+            if (export) {
+                String name = "uzum-monitor-" + new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date()) + ".json";
+                startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType("application/json").putExtra(Intent.EXTRA_TITLE, name), REQ_EXPORT);
+            } else {
+                startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType("*/*"), REQ_IMPORT);
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, "На телефоне нет приложения для выбора файла", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(final int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if ((requestCode != REQ_EXPORT && requestCode != REQ_IMPORT) || resultCode != RESULT_OK
+                || data == null || data.getData() == null) return;
+        final Uri uri = data.getData();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final String message = requestCode == REQ_EXPORT ? exportTo(uri) : importFrom(uri);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (isFinishing() || isDestroyed()) return;
+                        Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                        refreshUi();
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private String exportTo(Uri uri) {
+        try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+            if (out == null) return "Не удалось открыть файл для записи";
+            JSONObject data = Store.get(this).exportJson();
+            out.write(data.toString().getBytes(StandardCharsets.UTF_8));
+            return "Сохранено товаров: " + data.getJSONArray("products").length();
+        } catch (Exception e) {
+            return "Не удалось сохранить резервную копию";
+        }
+    }
+
+    private String importFrom(Uri uri) {
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) return "Не удалось открыть файл";
+            ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            byte[] chunk = new byte[8192];
+            int n;
+            while ((n = in.read(chunk)) > 0) {
+                buf.write(chunk, 0, n);
+                if (buf.size() > MAX_BACKUP) return "Файл слишком большой для резервной копии";
+            }
+            int[] r = Store.get(this).importJson(new JSONObject(new String(buf.toByteArray(), StandardCharsets.UTF_8)));
+            return "Загружено товаров: " + r[0] + (r[1] > 0 ? ", пропущено (уже есть или не подошли): " + r[1] : "");
+        } catch (Store.UserException e) {
+            return e.getMessage();
+        } catch (Exception e) {
+            return "Это не файл резервной копии Uzum Монитора.";
+        }
     }
 
     private void refreshUi() {

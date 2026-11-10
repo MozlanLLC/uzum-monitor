@@ -80,6 +80,52 @@ public class Bridge {
     }
 
     @JavascriptInterface
+    public void setTarget(double id, double price) {
+        Store.get(act).setTarget((long) id, (long) price);
+    }
+
+    /** Резервная копия: сохранить список товаров и историю в файл, который выберет пользователь. */
+    @JavascriptInterface
+    public void exportData() {
+        act.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                act.pickFile(true);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void importData() {
+        act.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                act.pickFile(false);
+            }
+        });
+    }
+
+    /** Для диагностики входа: только имена cookie сайта Uzum, без значений. */
+    @JavascriptInterface
+    public String uzumCookieNames() {
+        try {
+            String all = CookieManager.getInstance().getCookie("https://uzum.uz");
+            if (all == null) return "";
+            StringBuilder sb = new StringBuilder();
+            for (String part : all.split(";")) {
+                int eq = part.indexOf('=');
+                String name = (eq >= 0 ? part.substring(0, eq) : part).trim();
+                if (name.isEmpty()) continue;
+                if (sb.length() > 0) sb.append(' ');
+                sb.append(name);
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    @JavascriptInterface
     public void check(double id) {
         try {
             CheckService.start(act, (long) id);
