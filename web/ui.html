@@ -96,6 +96,9 @@ nav .badge{position:absolute;top:5px;left:50%;margin-left:6px;min-width:18px;hei
 .item{display:flex;align-items:center;width:100%;min-height:50px;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;font-size:15px;padding:0 2px}
 .item:last-child{border-bottom:0}
 .item.danger{color:var(--bad)}
+.vlist{max-height:52vh;overflow-y:auto;margin:0 -4px;padding:0 4px}
+.sheet .empty{padding:28px 16px}
+.sheet .primary:disabled{opacity:.5}
 </style></head><body>
 <header><h1 id="title">Товары</h1>
 <button class="login" id="login" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path></svg><span id="logintext">Войти в Uzum</span></button></header>
@@ -132,6 +135,7 @@ const store={get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v;
 const TITLES={products:'Товары',changes:'Изменения',favorites:'Избранное',settings:'Настройки'};
 let tab='products', filter='all', open={}, hist={}, onlyChanges={}, lastKey='', S=null;
 let fav=null, favMsg='', favSel={}, diag='', waiters={}, menuId=null, menuSure=false;
+let vs=null;   // выбор вариантов товара (цвет, размер): {id, loading, items, sel, replace, msg}
 let seenTs=Number(store.get('seenTs',0));
 // Аккаунт Uzum: state 'in' — вход выполнен, 'out' — не выполнен, '' — пока не удалось определить
 let acct={state:'',name:'',ts:0,c:[]}, loginOpened=false;
@@ -187,6 +191,27 @@ function diagScript(){
   out.card=[...document.querySelectorAll('span,div,p')].filter(e=>e.children.length<=2&&/с картой|без карты|karta/i.test(e.textContent||'')&&(e.textContent||'').length<60&&!e.closest('[data-test-id^="product-card"]')).slice(0,3).map(e=>clean(e.parentElement&&e.parentElement.parentElement||e).slice(0,1500));
   out.account=W.__who?W.__who():null;
   return JSON.stringify(out);
+}
+// Выполняется на странице товара: варианты (цвет, размер) — это ссылки на тот же товар с другим skuId.
+function varScript(){
+  const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
+  if(document.readyState!=='complete'&&el<12) return null;
+  const pid=u=>{ const m=String(u).match(/\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#]|$)/); return m?m[1]:''; };
+  const sku=u=>{ const m=String(u).match(/[?&]skuId=(\d+)/); return m?m[1]:''; };
+  const txt=e=>e?(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim():'';
+  const me=pid(location.href), seen={}, items=[];
+  const named=!!document.querySelector('[data-test-id="text__product-name"]');
+  if(!named&&el<12) return null;
+  for(const a of document.querySelectorAll('a[href*="skuId="]')){
+    if(a.closest('[data-test-id^="product-card"],[data-test-id="block__offer"],[data-test-id="list__products"]')) continue;
+    const href=a.href||'', id=sku(href); if(!id||pid(href)!==me||seen[id]) continue; seen[id]=1;
+    const img=a.querySelector('img');
+    let src=img?(img.currentSrc||img.getAttribute('src')||img.getAttribute('data-src')||''):''; if(!/^https:\/\//.test(src)) src='';
+    const name=(txt(a)||(img&&img.getAttribute('alt'))||a.getAttribute('title')||a.getAttribute('aria-label')||'').slice(0,60);
+    items.push({sku:id,name,image:src});
+  }
+  if(!items.length&&el<8) return null;
+  return JSON.stringify({items,current:sku(location.href),selected:txt(document.querySelector('[data-test-id="text__selected-sku-value"]')),named});
 }
 const pkey=u=>{ const m=u.match(/\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#]|$)/), s=u.match(/[?&]skuId=(\d+)/); return m?m[1]+':'+(s?s[1]:'0'):u; };
 
@@ -324,10 +349,30 @@ function loadFav(){ fav='loading'; favMsg=''; favSel={}; refresh(true);
     else if(!d.items.length){ fav=null; favMsg='Избранное пусто. Если товары там есть — сначала нажмите «Войти в Uzum» вверху.'; }
     else { fav=d.items; }
     refresh(true); }); }
-function openMenu(id){ menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
+function openMenu(id){ menuId=id; menuSure=false; vs=null; drawMenu(); $('#menu').hidden=false; }
+function loadVars(p){ vs={id:p.id,loading:true,items:[],sel:{},replace:!p.sku_id,msg:''}; drawMenu();
+  runOnPage(p.url,varScript,r=>{ if(!vs||vs.id!==p.id) return; let d=null; try{ d=r&&JSON.parse(r); }catch(e){}
+    vs.loading=false;
+    if(!d||!d.named) vs.msg='Не удалось открыть страницу товара. Проверьте интернет и попробуйте ещё раз.';
+    else if(d.items.length<2) vs.msg='У этого товара нет других вариантов.';
+    else vs.items=d.items;
+    drawMenu(); }); }
+function drawVars(p){
+  const have={}; S.products.forEach(x=>have[x.product_id+':'+(x.sku_id||0)]=1);
+  const n=Object.keys(vs.sel).filter(k=>vs.sel[k]).length;
+  let body;
+  if(vs.loading) body='<div class="empty">Читаю варианты…</div>';
+  else if(!vs.items.length) body=`<p class="note">${esc(vs.msg)}</p>`;
+  else body='<div class="vlist">'+vs.items.map((v,i)=>{ const got=have[p.product_id+':'+v.sku];
+      return `<label class="feed">${v.image?`<img src="${esc(v.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<span class="ft"><b>${esc(v.name||'Вариант '+v.sku)}</b><small>${got?'уже отслеживается':''}</small></span><input type="checkbox" data-v="${i}" ${got?'disabled checked':(vs.sel[i]?'checked':'')}></label>`; }).join('')+'</div>'
+    +(p.sku_id?'':`<label class="toggle"><input type="checkbox" id="vrep" ${vs.replace?'checked':''}><span>Убрать текущую карточку без варианта (её история удалится)</span></label>`);
+  $('#menubody').innerHTML=`<h2>Какой вариант отслеживать</h2><p class="note">${esc(p.name||'Товар')}. Каждый отмеченный вариант станет отдельным товаром в списке.</p>${body}
+  <div class="acts"><button class="primary" type="button" data-act="varapply" ${n?'':'disabled'}>Применить${n?' · '+n:''}</button><button class="ghost" type="button" data-act="varcancel">${vs.items.length?'Отмена':'Закрыть'}</button></div>`; }
 function drawMenu(){ const p=S.products.find(x=>x.id===menuId); if(!p){ $('#menu').hidden=true; return; }
+  if(vs&&vs.id===p.id){ drawVars(p); return; }
   $('#menubody').innerHTML=`<h2>${esc(p.name||'Товар')}</h2>
   <button class="item" type="button" data-act="check">Проверить сейчас</button>
+  ${CAN?'<button class="item" type="button" data-act="var">Выбрать вариант (цвет, размер)</button>':''}
   <button class="item" type="button" data-act="hist">${open[p.id]?'Скрыть историю':'История и график'}</button>
   <button class="item" type="button" data-act="site">Открыть на Uzum</button>
   <button class="item danger" type="button" data-act="del">${menuSure?'Точно удалить вместе с историей?':'Удалить'}</button>`; }
@@ -337,15 +382,24 @@ $('#nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!
 $('#fab').addEventListener('click',()=>{ $('#msg').textContent=''; $('#addsheet').hidden=false; $('#u').focus(); });
 $('#addclose').addEventListener('click',()=>{ $('#addsheet').hidden=true; });
 $('#addsheet').addEventListener('click',e=>{ if(e.target.id==='addsheet') $('#addsheet').hidden=true; });
-$('#menu').addEventListener('click',e=>{ if(e.target.id==='menu'){ $('#menu').hidden=true; return; }
+$('#menu').addEventListener('click',e=>{ if(e.target.id==='menu'){ $('#menu').hidden=true; vs=null; return; }
   const b=e.target.closest('button'); if(!b) return; const p=S.products.find(x=>x.id===menuId); if(!p) return;
   const a=b.dataset.act;
   if(a==='del'&&!menuSure){ menuSure=true; drawMenu(); return; }
+  if(a==='var'){ loadVars(p); return; }
+  if(a==='varcancel') vs=null;
+  if(a==='varapply'&&vs){ const base=p.url.split('?')[0]; let n=0;
+    Object.keys(vs.sel).forEach(i=>{ if(vs.sel[i]&&vs.items[i]){ const r=call('addProduct',base+'?skuId='+vs.items[i].sku); if(r&&!r.error) n++; } });
+    if(n&&vs.replace&&!p.sku_id) call('deleteProduct',p.id);
+    vs=null; }
   if(a==='check') call('check',p.id);
   if(a==='hist') open[p.id]=!open[p.id];
   if(a==='site') location.href=p.url;
   if(a==='del') call('deleteProduct',p.id);
   $('#menu').hidden=true; setTimeout(()=>refresh(true),200); });
+$('#menu').addEventListener('change',e=>{ const t=e.target; if(!vs) return;
+  if(t.dataset.v){ vs.sel[t.dataset.v]=t.checked; drawMenu(); }
+  if(t.id==='vrep') vs.replace=t.checked; });
 $('#f').addEventListener('submit',e=>{ e.preventDefault(); $('#msg').textContent='';
   const r=call('addProduct',$('#u').value); if(r&&r.error){ $('#msg').textContent=r.error; return; }
   $('#u').value=''; $('#addsheet').hidden=true; refresh(true); });
