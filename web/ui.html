@@ -195,10 +195,12 @@ function diagScript(){
 // Выполняется на странице товара: варианты (цвет, размер) — это ссылки на тот же товар с другим skuId.
 function varScript(){
   const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
+  if(W.__v) return (W.__v.left>0&&el<30)?null:JSON.stringify(W.__v.out);
   if(document.readyState!=='complete'&&el<12) return null;
   const pid=u=>{ const m=String(u).match(/\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#]|$)/); return m?m[1]:''; };
   const sku=u=>{ const m=String(u).match(/[?&]skuId=(\d+)/); return m?m[1]:''; };
   const txt=e=>e?(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim():'';
+  const pic=u=>/^https:\/\/images\.uzum\.uz\//.test(u||'')?u:'';
   const me=pid(location.href), seen={}, items=[];
   const named=!!document.querySelector('[data-test-id="text__product-name"]');
   if(!named&&el<12) return null;
@@ -206,12 +208,25 @@ function varScript(){
     if(a.closest('[data-test-id^="product-card"],[data-test-id="block__offer"],[data-test-id="list__products"]')) continue;
     const href=a.href||'', id=sku(href); if(!id||pid(href)!==me||seen[id]) continue; seen[id]=1;
     const img=a.querySelector('img');
-    let src=img?(img.currentSrc||img.getAttribute('src')||img.getAttribute('data-src')||''):''; if(!/^https:\/\//.test(src)) src='';
+    const src=img?(pic(img.currentSrc)||pic(img.getAttribute('src'))||pic(img.getAttribute('data-src'))||pic((img.getAttribute('srcset')||'').split(/[\s,]+/)[0])):'';
     const name=(txt(a)||(img&&img.getAttribute('alt'))||a.getAttribute('title')||a.getAttribute('aria-label')||'').slice(0,60);
-    items.push({sku:id,name,image:src});
+    items.push({sku:id,name,image:src,price:null,href});
   }
   if(!items.length&&el<8) return null;
-  return JSON.stringify({items,current:sku(location.href),selected:txt(document.querySelector('[data-test-id="text__selected-sku-value"]')),named});
+  // Цена у вариантов бывает разной: читаем её (и картинку, если её не было) со страницы каждого варианта
+  const list=items.slice(0,24);
+  W.__v={left:list.length,out:{items,current:sku(location.href),selected:txt(document.querySelector('[data-test-id="text__selected-sku-value"]')),named}};
+  const one=it=>fetch(it.href,{credentials:'same-origin'}).then(r=>r.ok?r.text():'').then(h=>{ if(!h) return;
+      const d=new DOMParser().parseFromString(h,'text/html'), meta=p=>{ const m=d.querySelector('meta[property="'+p+'"]'); return m?(m.getAttribute('content')||''):''; };
+      const digits=t=>{ const m=(t||'').replace(/[^\d.,]/g,'').match(/^\d+/); return m?parseInt(m[0],10):null; };
+      const pe=d.querySelector('[data-test-id="text__product-price"]');
+      it.price=(pe&&digits((pe.textContent||'').replace(/\s/g,'')))||digits(meta('product:price:amount'))||null;
+      if(!it.image) it.image=pic(meta('og:image'));
+      if(!it.name) it.name=((d.querySelector('[data-test-id="text__selected-sku-value"]')||{}).textContent||'').replace(/\s+/g,' ').trim().slice(0,60);
+    }).catch(()=>{}).then(()=>{ delete it.href; W.__v.left--; });
+  let i=0; const next=()=>{ if(i<list.length) one(list[i++]).then(next); }; next(); next(); next();
+  items.slice(24).forEach(it=>delete it.href);
+  return null;
 }
 const pkey=u=>{ const m=u.match(/\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#]|$)/), s=u.match(/[?&]skuId=(\d+)/); return m?m[1]+':'+(s?s[1]:'0'):u; };
 
@@ -361,10 +376,10 @@ function drawVars(p){
   const have={}; S.products.forEach(x=>have[x.product_id+':'+(x.sku_id||0)]=1);
   const n=Object.keys(vs.sel).filter(k=>vs.sel[k]).length;
   let body;
-  if(vs.loading) body='<div class="empty">Читаю варианты…</div>';
+  if(vs.loading) body='<div class="empty">Читаю варианты и цены…</div>';
   else if(!vs.items.length) body=`<p class="note">${esc(vs.msg)}</p>`;
   else body='<div class="vlist">'+vs.items.map((v,i)=>{ const got=have[p.product_id+':'+v.sku];
-      return `<label class="feed">${v.image?`<img src="${esc(v.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<span class="ft"><b>${esc(v.name||'Вариант '+v.sku)}</b><small>${got?'уже отслеживается':''}</small></span><input type="checkbox" data-v="${i}" ${got?'disabled checked':(vs.sel[i]?'checked':'')}></label>`; }).join('')+'</div>'
+      return `<label class="feed">${v.image?`<img src="${esc(v.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<span class="ft"><b>${esc(v.name||'Вариант '+v.sku)}</b><small>${[v.price?money(v.price):'',got?'уже отслеживается':''].filter(Boolean).join(' · ')}</small></span><input type="checkbox" data-v="${i}" ${got?'disabled checked':(vs.sel[i]?'checked':'')}></label>`; }).join('')+'</div>'
     +(p.sku_id?'':`<label class="toggle"><input type="checkbox" id="vrep" ${vs.replace?'checked':''}><span>Убрать текущую карточку без варианта (её история удалится)</span></label>`);
   $('#menubody').innerHTML=`<h2>Какой вариант отслеживать</h2><p class="note">${esc(p.name||'Товар')}. Каждый отмеченный вариант станет отдельным товаром в списке.</p>${body}
   <div class="acts"><button class="primary" type="button" data-act="varapply" ${n?'':'disabled'}>Применить${n?' · '+n:''}</button><button class="ghost" type="button" data-act="varcancel">${vs.items.length?'Отмена':'Закрыть'}</button></div>`; }
