@@ -40,7 +40,7 @@ public class Store extends SQLiteOpenHelper {
     private final Context ctx;
 
     private Store(Context c) {
-        super(c, "monitor.db", null, 2);
+        super(c, "monitor.db", null, 3);
         ctx = c;
     }
 
@@ -54,7 +54,8 @@ public class Store extends SQLiteOpenHelper {
                 + "product_id INTEGER NOT NULL, sku_id INTEGER NOT NULL DEFAULT 0, name TEXT DEFAULT '', "
                 + "image TEXT DEFAULT '', seller TEXT DEFAULT '', variant TEXT DEFAULT '', price INTEGER, "
                 + "old_price INTEGER, card_price INTEGER, in_stock INTEGER, stock INTEGER, added_at INTEGER, last_try INTEGER, "
-                + "last_ok INTEGER, status TEXT DEFAULT 'new', error TEXT DEFAULT '', warning TEXT DEFAULT '')");
+                + "last_ok INTEGER, status TEXT DEFAULT 'new', error TEXT DEFAULT '', warning TEXT DEFAULT '', "
+                + "target_price INTEGER)");
         db.execSQL("CREATE TABLE checks(id INTEGER PRIMARY KEY AUTOINCREMENT, product INTEGER NOT NULL, "
                 + "ts INTEGER NOT NULL, price INTEGER, old_price INTEGER, card_price INTEGER, in_stock INTEGER, stock INTEGER, "
                 + "event TEXT DEFAULT '')");
@@ -66,6 +67,9 @@ public class Store extends SQLiteOpenHelper {
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE products ADD COLUMN card_price INTEGER");
             db.execSQL("ALTER TABLE checks ADD COLUMN card_price INTEGER");
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE products ADD COLUMN target_price INTEGER");
         }
     }
 
@@ -126,6 +130,13 @@ public class Store extends SQLiteOpenHelper {
         String[] a = {String.valueOf(id)};
         db.delete("checks", "product=?", a);
         db.delete("products", "id=?", a);
+    }
+
+    /** Желаемая цена: о цене уведомляем, только когда она не выше этой. 0 — убрать. */
+    public void setTarget(long id, long price) {
+        ContentValues v = new ContentValues();
+        if (price > 0) v.put("target_price", price); else v.putNull("target_price");
+        getWritableDatabase().update("products", v, "id=?", new String[]{String.valueOf(id)});
     }
 
     public List<Long> allIds() {
@@ -234,6 +245,16 @@ public class Store extends SQLiteOpenHelper {
         boolean inStock = res.optBoolean("in_stock", false);
         long stock = res.isNull("stock") ? -1 : res.optLong("stock", -1);
 
+        long target = 0;
+        try (Cursor c = db.rawQuery("SELECT target_price FROM products WHERE id=?", a)) {
+            if (c.moveToFirst() && !c.isNull(0)) target = c.getLong(0);
+        }
+        long best = best(price, cardPrice), prevBest = best(prevPrice, prevCard);
+        boolean reached = target > 0 && inStock && best > 0 && best <= target;
+        boolean prevReached = target > 0 && prevInStock && prevBest > 0 && prevBest <= target;
+        // Задана желаемая цена и она не достигнута — изменения цены пишем в историю, но не уведомляем
+        boolean quiet = target > 0 && !reached;
+
         if (!hasPrev) {
             ch.event = "Начало наблюдения";
         } else {
@@ -249,10 +270,15 @@ public class Store extends SQLiteOpenHelper {
                 String s = String.format(Locale.US, "Цена %s: %s → %s (%+.1f%%)",
                         price < prevPrice ? "снизилась" : "выросла", money(prevPrice), money(price), pct);
                 ev.add(s);
-                nt.add(s);
+                if (!quiet) nt.add(s);
             }
             if (prevCard > 0 && cardPrice > 0 && prevCard != cardPrice) {
                 String s = "Цена с картой Uzum: " + money(prevCard) + " → " + money(cardPrice);
+                ev.add(s);
+                if (!quiet) nt.add(s);
+            }
+            if (reached && !prevReached) {
+                String s = "Цена не выше желаемой (" + money(target) + ")";
                 ev.add(s);
                 nt.add(s);
             }
@@ -294,6 +320,117 @@ public class Store extends SQLiteOpenHelper {
         v.put("warning", res.optString("warning"));
         db.update("products", v, "id=?", a);
         return ch;
+    }
+
+    /** Лучшая доступная цена: с картой Uzum, если она есть и ниже обычной. */
+    private static long best(long price, long card) {
+        return card > 0 && card < price ? card : price;
+    }
+
+    // ───────── резервная копия ─────────
+
+    private static final String BACKUP_FORMAT = "uzum-monitor-backup";
+    private static final String[] NUMBERS = {"price", "old_price", "card_price", "in_stock", "stock"};
+
+    /** Все товары вместе с историей проверок. */
+    public JSONObject exportJson() throws JSONException {
+        JSONObject out = new JSONObject();
+        out.put("format", BACKUP_FORMAT);
+        out.put("version", 1);
+        out.put("exported_at", now());
+        JSONArray ps = new JSONArray();
+        SQLiteDatabase db = getReadableDatabase();
+        try (Cursor c = db.rawQuery("SELECT * FROM products ORDER BY id", null)) {
+            while (c.moveToNext()) {
+                JSONObject p = row(c);
+                long id = p.optLong("id");
+                p.remove("id");
+                p.put("checks", history(id));
+                ps.put(p);
+            }
+        }
+        out.put("products", ps);
+        return out;
+    }
+
+    /** Добавляет товары из резервной копии. Уже отслеживаемые пропускает. Возвращает {добавлено, пропущено}. */
+    public int[] importJson(JSONObject data) throws UserException {
+        JSONArray ps = data.optJSONArray("products");
+        if (!BACKUP_FORMAT.equals(data.optString("format")) || ps == null) {
+            throw new UserException("Это не файл резервной копии Uzum Монитора.");
+        }
+        int added = 0, skipped = 0;
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            for (int i = 0; i < ps.length(); i++) {
+                JSONObject p = ps.optJSONObject(i);
+                String[] u = null;
+                try {
+                    if (p != null) u = parseUrl(p.optString("url"));
+                } catch (UserException ignored) {
+                }
+                if (u == null || exists(db, u[1], u[2])) {
+                    skipped++;
+                    continue;
+                }
+                ContentValues v = new ContentValues();
+                v.put("url", u[0]);
+                v.put("product_id", Long.parseLong(u[1]));
+                v.put("sku_id", Long.parseLong(u[2]));
+                v.put("name", text(p, "name", 300));
+                String image = text(p, "image", 500);
+                v.put("image", image.startsWith("https://images.uzum.uz/") ? image : "");
+                v.put("seller", text(p, "seller", 200));
+                v.put("variant", text(p, "variant", 200));
+                for (String k : NUMBERS) copyLong(v, p, k);
+                copyLong(v, p, "added_at");
+                copyLong(v, p, "last_try");
+                copyLong(v, p, "last_ok");
+                copyLong(v, p, "target_price");
+                String status = text(p, "status", 20);
+                v.put("status", status.matches("new|ok|error|not_found") ? status : "new");
+                v.put("error", text(p, "error", 500));
+                v.put("warning", text(p, "warning", 500));
+                long id = db.insert("products", null, v);
+                if (id < 0) {
+                    skipped++;
+                    continue;
+                }
+                JSONArray checks = p.optJSONArray("checks");
+                for (int j = 0; checks != null && j < checks.length(); j++) {
+                    JSONObject k = checks.optJSONObject(j);
+                    if (k == null || k.optLong("ts", 0) <= 0) continue;
+                    ContentValues r = new ContentValues();
+                    r.put("product", id);
+                    r.put("ts", k.optLong("ts"));
+                    for (String n : NUMBERS) copyLong(r, k, n);
+                    r.put("event", text(k, "event", 500));
+                    db.insert("checks", null, r);
+                }
+                added++;
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+        return new int[]{added, skipped};
+    }
+
+    private static boolean exists(SQLiteDatabase db, String productId, String skuId) {
+        try (Cursor c = db.rawQuery("SELECT id FROM products WHERE product_id=? AND sku_id=?",
+                new String[]{productId, skuId})) {
+            return c.moveToFirst();
+        }
+    }
+
+    private static String text(JSONObject o, String key, int max) {
+        String s = o.isNull(key) ? "" : o.optString(key);
+        return s.length() > max ? s.substring(0, max) : s;
+    }
+
+    private static void copyLong(ContentValues v, JSONObject o, String key) {
+        if (o.isNull(key)) v.putNull(key); else v.put(key, o.optLong(key));
     }
 
     private static void putOrNull(ContentValues v, String key, long n) {

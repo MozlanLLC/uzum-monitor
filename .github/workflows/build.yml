@@ -5,8 +5,12 @@ on:
     branches: [main]
     paths:
       - 'android/**'
+      - 'web/**'            # копия web/ встроена в APK — пересобираем, чтобы она не устаревала
       - '.github/workflows/build.yml'
   workflow_dispatch:
+
+# Действия закреплены по хешу коммита: в сборке участвует ключ подписи,
+# поэтому чужой код не должен меняться без нашего ведома. Рядом указан тег, которому соответствует хеш.
 
 # По умолчанию — никаких прав; каждая задача получает только то, что ей нужно.
 permissions: {}
@@ -17,16 +21,16 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           gradle-version: '8.9'
 
@@ -54,7 +58,7 @@ jobs:
       - name: Rename APK
         run: cp android/app/build/outputs/apk/release/app-release.apk uzum-monitor.apk
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: uzum-monitor-apk
           path: uzum-monitor.apk
@@ -66,7 +70,7 @@ jobs:
     permissions:
       contents: write   # только для создания релиза
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: uzum-monitor-apk
 

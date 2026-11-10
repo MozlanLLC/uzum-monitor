@@ -97,6 +97,14 @@ nav .badge{position:absolute;top:5px;left:50%;margin-left:6px;min-width:18px;hei
 .item:last-child{border-bottom:0}
 .item.danger{color:var(--bad)}
 a.item{color:var(--acc);text-decoration:none}
+.var{font-size:13px;font-weight:600;margin-top:3px;overflow-wrap:anywhere}
+.tools{display:flex;gap:8px;margin-bottom:12px}
+.tools input,.tools select{height:40px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);padding:0 10px;font:inherit;font-size:14px;min-width:0}
+.tools input{flex:1}
+.tools select{flex:none;max-width:48%}
+.tools input:focus,.tools select:focus{outline:2px solid var(--acc);outline-offset:1px}
+.newver{border-color:var(--acc)}
+.newver a{color:var(--acc);font-weight:600}
 </style></head><body>
 <header><h1 id="title">Товары</h1>
 <button class="login" id="login" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path></svg><span id="logintext">Войти в Uzum</span></button></header>
@@ -130,6 +138,14 @@ const hm=t=>new Date(t*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'
 const when=t=>{ if(!t) return '—'; const d=new Date(t*1000), n=new Date(); return d.toDateString()===n.toDateString()?'в '+hm(t):dt(t); };
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store={get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch(e){ return d; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }};
+// Номер сборки приложения, начиная с которой работают все функции интерфейса.
+// Увеличивается только когда меняется код в android/ и без нового APK что-то не заработает.
+const NEED_APP=5;
+const HAS=m=>!!(window.Android&&typeof Android[m]==='function');
+const appBuild=()=>{ const m=String((S&&S.info&&S.info.app)||'').match(/(\d+)$/); return m?Number(m[1]):0; };
+const outdated=()=>!!window.Android&&appBuild()>0&&appBuild()<NEED_APP;
+const SORTS={new:'Сначала новые',changed:'Недавно менялись',drop:'Сильнее подешевели',price:'Сначала дешёвые',name:'По названию'};
+let sort=store.get('sort','new'), query='', targetEdit=false; if(!SORTS[sort]) sort='new';
 const TITLES={products:'Товары',changes:'Изменения',favorites:'Избранное',settings:'Настройки'};
 let tab='products', filter='all', open={}, hist={}, onlyChanges={}, lastKey='', S=null;
 let fav=null, favMsg='', favSel={}, diag='', waiters={}, menuId=null, menuSure=false;
@@ -176,6 +192,19 @@ function diagScript(){
   out.card=[...document.querySelectorAll('span,div,p')].filter(e=>e.children.length<=2&&/с картой|без карты|karta/i.test(e.textContent||'')&&(e.textContent||'').length<60&&!e.closest('[data-test-id^="product-card"]')).slice(0,3).map(e=>clean(e.parentElement&&e.parentElement.parentElement||e).slice(0,1500));
   return JSON.stringify(out);
 }
+function acctDiagScript(){
+  const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
+  if(el<6||(document.readyState!=='complete'&&el<15)) return null;
+  const txt=e=>(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim().slice(0,30);
+  const names=s=>(s||'').split(';').map(x=>x.split('=')[0].trim()).filter(Boolean);
+  let ls=[]; try{ ls=Object.keys(localStorage); }catch(e){}
+  return JSON.stringify({page:location.pathname, w:innerWidth,
+    cards:document.querySelectorAll('[data-test-id="product-card--default"]').length,
+    empty:!!document.querySelector('[data-test-id="block__empty-page"]'),
+    cookies:names(document.cookie), storage:ls.slice(0,60),
+    buttons:[...document.querySelectorAll('a[data-test-id],button[data-test-id],header [data-test-id],nav [data-test-id]')]
+      .filter(e=>!e.closest('[data-test-id^="product-card"]')).slice(0,70).map(e=>e.getAttribute('data-test-id')+'='+txt(e))});
+}
 const pkey=u=>{ const m=u.match(/\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#]|$)/), s=u.match(/[?&]skuId=(\d+)/); return m?m[1]+':'+(s?s[1]:'0'):u; };
 
 function stepPath(pts,x,y){ let d='',prev=null; for(const p of pts){ d+=prev?` H${x(p.ts).toFixed(1)} V${y(p.price).toFixed(1)}`:`M${x(p.ts).toFixed(1)} ${y(p.price).toFixed(1)}`; prev=p; } return d; }
@@ -211,6 +240,19 @@ function histHtml(id){
   ${rows.map(r=>`<tr><td>${dt(r.ts)}</td><td class="n">${money(r.price)}</td><td class="n">${r.in_stock?(r.stock!=null?r.stock+' шт':'есть'):'нет'}</td><td class="ev">${esc(r.event||'без изменений')}</td></tr>`).join('')||'<tr><td colspan="4">Пока нет записей</td></tr>'}
   </table></div></div>`;
 }
+const best=p=>p.card_price&&p.price&&p.card_price<p.price?p.card_price:p.price;
+const lastChange=p=>{ const h=hist[p.id]; let t=0; if(h) for(const r of h.checks) if(r.event&&r.event!=='Начало наблюдения'&&r.ts>t) t=r.ts; return t; };
+const dropPct=p=>p.last_ok&&p.first_price&&p.price?(p.price-p.first_price)/p.first_price:0;
+function sorted(list){
+  const a=list.slice();
+  if(sort==='changed') a.sort((x,y)=>lastChange(y)-lastChange(x));
+  else if(sort==='drop') a.sort((x,y)=>dropPct(x)-dropPct(y));
+  else if(sort==='price') a.sort((x,y)=>(best(x)||Infinity)-(best(y)||Infinity));
+  else if(sort==='name') a.sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''),'ru'));
+  return a;
+}
+const matches=p=>{ const q=query.trim().toLowerCase(); return !q||[p.name,p.seller,p.variant].some(t=>String(t||'').toLowerCase().indexOf(q)>=0); };
+const newVer=()=>outdated()?`<div class="card newver"><b>Вышла новая версия приложения</b><p class="note" style="margin:6px 0 8px">Без неё часть функций не работает: резервная копия, желаемая цена, выход из Uzum. Ставится поверх, список товаров сохранится.</p><a href="${APK}">Скачать новую версию</a></div>`:'';
 const cheaper=p=>p.last_ok&&p.first_price&&p.price&&p.price<p.first_price;
 const inStock=p=>p.last_ok&&p.in_stock&&p.status!=='not_found';
 const outOf=p=>p.last_ok&&(!p.in_stock||p.status==='not_found');
@@ -221,11 +263,14 @@ function card(p){
   else if(has) tags.push(p.in_stock?`<span class="tag good">в наличии${p.stock!=null?': '+p.stock+' шт':''}</span>`:'<span class="tag bad">нет в наличии</span>');
   if(has&&p.first_price&&p.price&&p.first_price!==p.price){ const pc=(p.price-p.first_price)/p.first_price*100;
     tags.push(`<span class="tag ${pc<0?'good':'bad'}">${pc<0?'↓':'↑'} ${Math.abs(pc).toFixed(1).replace('.',',')}% с начала</span>`); }
-  const sub=[p.seller,p.variant].filter(Boolean).map(esc).join(' · ');
+  if(p.variant&&!p.sku_id) tags.push('<span class="tag warn">вариант не закреплён</span>');
+  if(p.target_price){ const b=best(p); tags.push(has&&p.in_stock&&b&&b<=p.target_price?`<span class="tag good">не выше желаемой ${money(p.target_price)}</span>`:`<span class="tag">жду ${money(p.target_price)}</span>`); }
+  const sub=esc(p.seller||'');
   return `<article class="card"><div class="top" data-open="${p.id}">
   ${p.image?`<img class="pic" src="${esc(p.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="pic"></div>'}
   <div class="info"><div class="nrow"><a class="name" href="${esc(p.url)}">${esc(p.name||p.url)}</a>
   <button class="more" type="button" data-menu="${p.id}" aria-label="Действия с товаром"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></button></div>
+  ${p.variant?`<div class="var">${esc(p.variant)}</div>`:''}
   ${sub?`<div class="sub">${sub}</div>`:''}
   ${has?`<div class="prow"><div class="pcol"><div class="price">${money(p.price)}</div>
   ${p.card_price?`<div class="cardp">${money(p.card_price)} с картой Uzum</div>`:''}
@@ -243,11 +288,13 @@ function events(){
 }
 function viewProducts(){
   const ps=S.products, n=ps.length;
-  const list=filter==='cheaper'?ps.filter(cheaper):filter==='in'?ps.filter(inStock):filter==='out'?ps.filter(outOf):ps;
-  if(!n) return '<div class="empty">Пока ничего не отслеживается.<br><br>Нажмите «+», чтобы добавить товар по ссылке, или выберите товары во вкладке «Избранное».</div>';
-  return `<div class="status"><span>${S.busy?'Идёт проверка…':'Следующая проверка в '+hm(S.next_run)}</span><button class="ghost" type="button" id="all" ${S.busy?'disabled':''}>Проверить все</button></div>
+  const list=sorted((filter==='cheaper'?ps.filter(cheaper):filter==='in'?ps.filter(inStock):filter==='out'?ps.filter(outOf):ps).filter(matches));
+  if(!n) return newVer()+'<div class="empty">Пока ничего не отслеживается.<br><br>Нажмите «+», чтобы добавить товар по ссылке, или выберите товары во вкладке «Избранное».</div>';
+  return `${newVer()}<div class="status"><span>${S.busy?'Идёт проверка…':'Следующая проверка в '+hm(S.next_run)}</span><button class="ghost" type="button" id="all" ${S.busy?'disabled':''}>Проверить все</button></div>
   <div class="chips"><button type="button" class="chip ${filter==='all'?'on':''}" data-filter="all">Все · ${n}</button><button type="button" class="chip ${filter==='in'?'on':''}" data-filter="in">В наличии · ${ps.filter(inStock).length}</button><button type="button" class="chip ${filter==='cheaper'?'on':''}" data-filter="cheaper">Подешевели · ${ps.filter(cheaper).length}</button><button type="button" class="chip ${filter==='out'?'on':''}" data-filter="out">Нет в наличии · ${ps.filter(outOf).length}</button></div>
-  ${list.map(card).join('')||'<div class="empty">В этом фильтре пока пусто.</div>'}`;
+  <div class="tools"><input id="q" type="search" placeholder="Поиск по названию" aria-label="Поиск по названию" autocomplete="off" value="${esc(query)}">
+  <select id="sort" aria-label="Порядок товаров">${Object.keys(SORTS).map(k=>`<option value="${k}" ${k===sort?'selected':''}>${SORTS[k]}</option>`).join('')}</select></div>
+  ${list.map(card).join('')||`<div class="empty">${query.trim()?'Ничего не найдено.':'В этом фильтре пока пусто.'}</div>`}`;
 }
 function viewChanges(){
   const ev=events().slice(0,150);
@@ -266,14 +313,14 @@ function viewFavorites(){
     body='<div class="card">'+fav.map((f,i)=>{ const got=have[pkey(f.url)];
       return `<label class="feed">${f.image?`<img src="${esc(f.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<span class="ft"><b>${esc(f.title||f.url)}</b><small>${got?'уже отслеживается':esc(f.price)}</small></span><input type="checkbox" data-f="${i}" ${got?'disabled checked':(favSel[i]?'checked':'')}></label>`; }).join('')+'</div>'
       +`<div class="bar"><button class="primary" type="button" id="favadd" ${n?'':'disabled'}>Применить${n?' · '+n:''}</button></div>`; }
-  return `<p class="note">Товары из вашего избранного на Uzum. Отметьте те, за которыми нужно следить, и нажмите «Применить».</p>
+  return `<p class="note">Товары из вашего избранного на Uzum. Отметьте те, за которыми нужно следить, и нажмите «Применить». Цвет или размер здесь не выбирается: чтобы следить за конкретным вариантом, добавьте ссылку на него через «+» или «Поделиться».</p>
   <div class="acts" style="margin:0 0 12px"><button class="ghost" type="button" id="favload">${fav&&fav!=='loading'?'Обновить список':'Показать избранное'}</button>${pick}</div>
   ${favMsg?`<p class="note">${esc(favMsg)}</p>`:''}${body}`;
 }
 function viewSettings(){
   const i=S.info||{};
   const row=(title,sub,ok,key,btn)=>`<div class="setrow"><div>${title}<small>${sub}</small></div>${ok?'<span class="ok">включено</span>':`<button class="ghost" type="button" data-s="${key}">${btn}</button>`}</div>`;
-  return `<div class="card"><h2>Разрешения</h2>
+  return `${newVer()}<div class="card"><h2>Разрешения</h2>
   ${row('Уведомления','Без разрешения приложение не сможет сообщать об изменениях',i.notif,'notifications','Разрешить')}
   ${row('Работа в фоне','Отключите экономию батареи, иначе телефон будет пропускать проверки',i.battery,'battery','Настроить')}
   ${row('Точное время проверок','Чтобы проверки шли ровно в :00 и :30',i.exact,'alarms','Разрешить')}</div>
@@ -283,6 +330,8 @@ function viewSettings(){
   ${acct.state==='in'?'<p class="note"><span class="ok">Вход выполнен</span></p>':''}
   <div class="acts"><button class="ghost" type="button" id="login2">${acct.state==='in'?'Открыть Uzum':'Войти в Uzum'}</button>${acct.state==='in'?'<button class="ghost" type="button" id="logout2">Выйти</button>':''}${CAN&&S.products.length?'<button class="ghost" type="button" id="diagb">Диагностика</button>':''}</div>
   ${diag?`<textarea readonly aria-label="Данные диагностики">${esc(diag)}</textarea><div class="acts"><button class="ghost" type="button" id="diagcopy">Скопировать</button><button class="ghost" type="button" id="diagclose">Закрыть</button></div>`:''}</div>
+  <div class="card"><h2>Резервная копия</h2><p class="note">Список товаров и история цен сохраняются в файл. Пригодится при переустановке приложения или переносе на другой телефон.</p>
+  ${HAS('exportData')?'<div class="acts"><button class="ghost" type="button" id="exp">Сохранить в файл</button><button class="ghost" type="button" id="imp">Загрузить из файла</button></div>':'<p class="note">Доступно в новой версии приложения.</p>'}</div>
   <div class="ver">Приложение ${esc(i.app||'—')} · обновление №${esc(i.web||'—')}</div>`;
 }
 function loadHist(id){ hist[id]=call('getHistory',Number(id)); }
@@ -291,14 +340,16 @@ function refresh(force){
   for(const p of s.products){ p.pending=s.pending.indexOf(p.id)>=0; if(!hist[p.id]||hist[p.id].checks.length!==p.checks_count) loadHist(p.id); }
   const fresh=events().filter(e=>e.ts>seenTs).length;
   if(tab==='changes'&&fresh){ seenTs=Math.floor(Date.now()/1000); store.set('seenTs',seenTs); }
-  const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,diag,fresh,acct.state]);
+  const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,diag,fresh,acct.state,query,sort]);
   if(key===lastKey&&!force) return; lastKey=key;
   $('#title').textContent=TITLES[tab];
   const li=acct.state==='in'; $('#login').classList.toggle('in',li); $('#logintext').textContent=li?'Выйти':'Войти в Uzum';
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const bd=$('#badge'); bd.hidden=!(fresh&&tab!=='changes'); bd.textContent=fresh>99?'99+':fresh;
   $('#fab').style.display=tab==='products'?'':'none';
+  const ae=document.activeElement, typing=ae&&ae.id==='q', pos=typing?ae.selectionStart:0;
   $('#view').innerHTML=tab==='products'?viewProducts():tab==='changes'?viewChanges():tab==='favorites'?viewFavorites():viewSettings();
+  if(typing){ const q=$('#q'); if(q){ q.focus(); try{ q.setSelectionRange(pos,pos); }catch(e){} } }
 }
 window.refresh=refresh;
 // После возврата с экрана входа заново читаем избранное: по нему видно, выполнен ли вход
@@ -318,10 +369,18 @@ function openAcct(){ acctMenu=true; menuId=null;
   $('#menu').hidden=false; }
 function logout(){ if(!CANOUT||outBusy) return; outBusy=true;
   runOnPage(WISHES,wipeScript,()=>{ Android.logoutUzum(); outBusy=false; setAcct(''); fav=null; favSel={}; favMsg='Вы вышли из аккаунта Uzum.'; refresh(true); }); }
-function openMenu(id){ acctMenu=false; menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
+function openMenu(id){ acctMenu=false; targetEdit=false; menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
+function drawTarget(p){
+  $('#menubody').innerHTML=`<h2>Желаемая цена</h2><p class="note">${esc(p.name||'Товар')}${p.variant?' · '+esc(p.variant):''}. Сейчас ${money(best(p))}. Уведомление о цене придёт, только когда она станет не выше указанной. О наличии приложение сообщает как обычно.</p>
+  <input id="tp" type="text" inputmode="numeric" placeholder="Цена в сумах" aria-label="Желаемая цена в сумах" autocomplete="off" value="${p.target_price?num(p.target_price):''}">
+  <div class="msg" id="tmsg"></div>
+  <div class="acts"><button class="primary" type="button" data-act="tsave">Сохранить</button>${p.target_price?'<button class="ghost" type="button" data-act="tclear">Убрать</button>':''}<button class="ghost" type="button" data-act="tcancel">Отмена</button></div>`;
+  $('#tp').focus(); }
 function drawMenu(){ const p=S.products.find(x=>x.id===menuId); if(!p){ $('#menu').hidden=true; return; }
+  if(targetEdit){ drawTarget(p); return; }
   $('#menubody').innerHTML=`<h2>${esc(p.name||'Товар')}</h2>
   <button class="item" type="button" data-act="check">Проверить сейчас</button>
+  ${HAS('setTarget')?`<button class="item" type="button" data-act="target">Желаемая цена${p.target_price?': '+money(p.target_price):''}</button>`:''}
   <button class="item" type="button" data-act="hist">${open[p.id]?'Скрыть историю':'История и график'}</button>
   <button class="item" type="button" data-act="site">Открыть на Uzum</button>
   <button class="item danger" type="button" data-act="del">${menuSure?'Точно удалить вместе с историей?':'Удалить'}</button>`; }
@@ -336,6 +395,11 @@ $('#menu').addEventListener('click',e=>{ if(e.target.id==='menu'){ $('#menu').hi
   if(acctMenu){ $('#menu').hidden=true; if(a==='uzum') login(); if(a==='logout') logout(); return; }
   const p=S.products.find(x=>x.id===menuId); if(!p) return;
   if(a==='del'&&!menuSure){ menuSure=true; drawMenu(); return; }
+  if(a==='target'){ targetEdit=true; drawMenu(); return; }
+  if(a==='tsave'){ const v=Number($('#tp').value.replace(/[^\d]/g,''));
+    if(!v){ $('#tmsg').textContent='Введите цену числом, например 150 000.'; return; }
+    call('setTarget',p.id,v); }
+  if(a==='tclear') call('setTarget',p.id,0);
   if(a==='check') call('check',p.id);
   if(a==='hist') open[p.id]=!open[p.id];
   if(a==='site') location.href=p.url;
@@ -359,7 +423,11 @@ $('#view').addEventListener('click',e=>{
     if(b.dataset.s) call('openSettings',b.dataset.s);
     if(b.id==='login2') login();
     if(b.id==='logout2') openAcct();
-    if(b.id==='diagb'){ diag='Собираю данные…'; refresh(true); runOnPage(S.products[0].url,diagScript,r=>{ diag=r||'Страница не ответила.'; refresh(true); }); }
+    if(b.id==='exp') Android.exportData();
+    if(b.id==='imp') Android.importData();
+    if(b.id==='diagb'){ diag='Собираю данные…'; refresh(true); runOnPage(S.products[0].url,diagScript,r=>{ const page=r||'Страница не ответила.';
+      runOnPage(WISHES,acctDiagScript,w=>{ let ck=''; try{ if(HAS('uzumCookieNames')) ck=Android.uzumCookieNames(); }catch(e){}
+        diag=page+'\n\n--- аккаунт: страница избранного ---\n'+(w||'Страница не ответила.')+'\n--- имена cookie (без значений) ---\n'+(ck||'нет данных')+'\n--- приложение ---\n'+JSON.stringify({app:S.info.app,web:S.info.web,acct:acct.state}); refresh(true); }); }); }
     if(b.id==='diagcopy'){ Android.copy(diag); b.textContent='Скопировано'; }
     if(b.id==='diagclose'){ diag=''; refresh(true); }
     return;
@@ -369,6 +437,8 @@ $('#view').addEventListener('click',e=>{
 $('#view').addEventListener('change',e=>{ const t=e.target;
   if(t.dataset.only){ onlyChanges[t.dataset.only]=t.checked; refresh(true); }
   if(t.dataset.f){ favSel[t.dataset.f]=t.checked; refresh(true); }
+  if(t.id==='sort'){ sort=t.value; store.set('sort',sort); refresh(true); }
   if(t.id==='ns'){ call('setPref','notify_stock',t.checked?'1':'0'); refresh(true); } });
+$('#view').addEventListener('input',e=>{ if(e.target.id==='q'){ query=e.target.value; refresh(true); } });
 refresh(true); setInterval(refresh,3000);
 </script></body></html>

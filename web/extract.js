@@ -85,7 +85,7 @@
     name: txt(nameEl),
     price: price, oldPrice: oldPrice, cardPrice: cardPrice, image: image, ogImage: ogImage,
     seller: txt(q('text__shop-title')),
-    variant: txt(q('text__selected-sku-value')),
+    variant: [...new Set(qa('text__selected-sku-value').map(txt).filter(Boolean))].join(', '),
     stock: stock, canBuy: canBuy, soldOutText: soldOutText,
     ogTitle: meta('og:title'),
     retailerId: meta('product:retailer_item_id'),
