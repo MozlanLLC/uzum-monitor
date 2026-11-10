@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 
 import org.json.JSONArray;
@@ -132,6 +133,22 @@ public class Bridge {
             @Override
             public void run() {
                 act.startActivity(new Intent(act, BrowserActivity.class).putExtra("url", url));
+            }
+        });
+    }
+
+    /** Выход из аккаунта Uzum: удаляет cookie сайта, сохранённые в приложении. */
+    @JavascriptInterface
+    public void logoutUzum() {
+        act.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    CookieManager cm = CookieManager.getInstance();
+                    cm.removeAllCookies(null);
+                    cm.flush();
+                } catch (Exception ignored) {
+                }
             }
         });
     }
