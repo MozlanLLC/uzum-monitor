@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "files": ["ui.html", "extract.js"],
   "notes": "Новый интерфейс: вкладки снизу, карточки с графиком"
 }

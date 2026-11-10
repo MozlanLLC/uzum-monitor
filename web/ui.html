@@ -30,7 +30,7 @@ main{padding:0 14px 170px}
 .pic{width:64px;height:86px;border-radius:10px;object-fit:cover;background:var(--line);flex:none}
 .info{flex:1;min-width:0}
 .nrow{display:flex;align-items:flex-start;gap:2px}
-.name{flex:1;font-weight:600;font-size:14px;line-height:1.3;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.name{flex:1;color:var(--ink);text-decoration:none;font-weight:600;font-size:14px;line-height:1.3;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .more{width:44px;height:44px;margin:-10px -10px -8px 0;border:0;background:transparent;display:flex;align-items:center;justify-content:center;flex:none}
 .sub{color:var(--mute);font-size:12px;margin-top:2px}
 .prow{display:flex;align-items:center;gap:8px;margin-top:6px}
@@ -77,6 +77,7 @@ textarea{width:100%;height:120px;font:11px/1.3 monospace;border:1px solid var(--
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:6px;z-index:6}
 nav button{flex:1;height:60px;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--mute);font-size:11px;font-weight:500;position:relative;padding:0}
 nav button.on{color:var(--acc);font-weight:600}
+nav .badge[hidden]{display:none}
 nav .badge{position:absolute;top:5px;left:50%;margin-left:6px;min-width:18px;height:18px;border-radius:9px;background:var(--acc);color:var(--acc-ink);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10;display:flex;align-items:flex-end}
 .scrim[hidden]{display:none}
@@ -192,6 +193,7 @@ function histHtml(id){
   </table></div></div>`;
 }
 const cheaper=p=>p.last_ok&&p.first_price&&p.price&&p.price<p.first_price;
+const inStock=p=>p.last_ok&&p.in_stock&&p.status!=='not_found';
 const outOf=p=>p.last_ok&&(!p.in_stock||p.status==='not_found');
 function card(p){
   const has=!!p.last_ok, tags=[];
@@ -203,7 +205,7 @@ function card(p){
   const sub=[p.seller,p.variant].filter(Boolean).map(esc).join(' · ');
   return `<article class="card"><div class="top" data-open="${p.id}">
   ${p.image?`<img class="pic" src="${esc(p.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="pic"></div>'}
-  <div class="info"><div class="nrow"><div class="name">${esc(p.name||p.url)}</div>
+  <div class="info"><div class="nrow"><a class="name" href="${esc(p.url)}">${esc(p.name||p.url)}</a>
   <button class="more" type="button" data-menu="${p.id}" aria-label="Действия с товаром"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></button></div>
   ${sub?`<div class="sub">${sub}</div>`:''}
   ${has?`<div class="prow"><div class="pcol"><div class="price">${money(p.price)}</div>
@@ -222,10 +224,10 @@ function events(){
 }
 function viewProducts(){
   const ps=S.products, n=ps.length;
-  const list=filter==='cheaper'?ps.filter(cheaper):filter==='out'?ps.filter(outOf):ps;
+  const list=filter==='cheaper'?ps.filter(cheaper):filter==='in'?ps.filter(inStock):filter==='out'?ps.filter(outOf):ps;
   if(!n) return '<div class="empty">Пока ничего не отслеживается.<br><br>Нажмите «+», чтобы добавить товар по ссылке, или выберите товары во вкладке «Избранное».</div>';
   return `<div class="status"><span>${S.busy?'Идёт проверка…':'Следующая проверка в '+hm(S.next_run)}</span><button class="ghost" type="button" id="all" ${S.busy?'disabled':''}>Проверить все</button></div>
-  <div class="chips"><button type="button" class="chip ${filter==='all'?'on':''}" data-filter="all">Все · ${n}</button><button type="button" class="chip ${filter==='cheaper'?'on':''}" data-filter="cheaper">Подешевели · ${ps.filter(cheaper).length}</button><button type="button" class="chip ${filter==='out'?'on':''}" data-filter="out">Нет в наличии · ${ps.filter(outOf).length}</button></div>
+  <div class="chips"><button type="button" class="chip ${filter==='all'?'on':''}" data-filter="all">Все · ${n}</button><button type="button" class="chip ${filter==='in'?'on':''}" data-filter="in">В наличии · ${ps.filter(inStock).length}</button><button type="button" class="chip ${filter==='cheaper'?'on':''}" data-filter="cheaper">Подешевели · ${ps.filter(cheaper).length}</button><button type="button" class="chip ${filter==='out'?'on':''}" data-filter="out">Нет в наличии · ${ps.filter(outOf).length}</button></div>
   ${list.map(card).join('')||'<div class="empty">В этом фильтре пока пусто.</div>'}`;
 }
 function viewChanges(){
@@ -323,7 +325,7 @@ $('#view').addEventListener('click',e=>{
     if(b.id==='diagclose'){ diag=''; refresh(true); }
     return;
   }
-  if(e.target.closest('.hist')) return;
+  if(e.target.closest('.hist')||e.target.closest('a')) return;
   const o=e.target.closest('[data-open]'); if(o){ const id=o.dataset.open; open[id]=!open[id]; refresh(true); } });
 $('#view').addEventListener('change',e=>{ const t=e.target;
   if(t.dataset.only){ onlyChanges[t.dataset.only]=t.checked; refresh(true); }
