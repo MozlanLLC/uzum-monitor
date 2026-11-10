@@ -96,6 +96,7 @@ nav .badge{position:absolute;top:5px;left:50%;margin-left:6px;min-width:18px;hei
 .item{display:flex;align-items:center;width:100%;min-height:50px;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;font-size:15px;padding:0 2px}
 .item:last-child{border-bottom:0}
 .item.danger{color:var(--bad)}
+a.item{color:var(--acc);text-decoration:none}
 </style></head><body>
 <header><h1 id="title">Товары</h1>
 <button class="login" id="login" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path></svg><span id="logintext">Войти в Uzum</span></button></header>
@@ -133,32 +134,20 @@ const TITLES={products:'Товары',changes:'Изменения',favorites:'И
 let tab='products', filter='all', open={}, hist={}, onlyChanges={}, lastKey='', S=null;
 let fav=null, favMsg='', favSel={}, diag='', waiters={}, menuId=null, menuSure=false;
 let seenTs=Number(store.get('seenTs',0));
-// Аккаунт Uzum: state 'in' — вход выполнен, 'out' — не выполнен, '' — пока не удалось определить
-let acct={state:'',name:'',ts:0,c:[]}, loginOpened=false;
+// Аккаунт Uzum: state 'in' — вход выполнен (приложение прочитало ваше избранное), '' — не выполнен или неизвестно
+let acct={state:''}, loginOpened=false, acctMenu=false, outBusy=false;
+const CANOUT=!!(window.Android&&typeof Android.logoutUzum==='function');
 try{ acct=Object.assign(acct,JSON.parse(store.get('acct','{}'))); }catch(e){}
 
 window.onPageResult=(token,result)=>{ const w=waiters[token]; delete waiters[token]; if(w) w(result); };
-function runOnPage(url,fn,cb){ const t='t'+Date.now()+Math.random(); waiters[t]=cb; Android.runOnPage(url,'window.__who='+who.toString()+';('+fn.toString()+')()',t); }
-// Выполняется на странице uzum.uz: по кнопке аккаунта в шапке сайта определяет, выполнен ли вход, и имя.
-function who(){
-  const txt=e=>(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim();
-  const c=[...document.querySelectorAll('[data-test-id]')].filter(e=>/auth|login|sign|cabinet|profile|account|user/i.test(e.getAttribute('data-test-id'))
-    &&!e.closest('[data-test-id^="product-card"]')&&(e.matches('a,button')||e.closest('a,button,header,nav')))
-    .map(e=>[e.getAttribute('data-test-id'),txt(e).slice(0,40)]);
-  const out=/^(войти|вход|войти в аккаунт|kirish|sign in|log in)$/i, generic=/^(кабинет|личный кабинет|профиль|мой профиль|аккаунт|kabinet|shaxsiy kabinet|profil)?$/i;
-  let state='', name='';
-  if(c.some(x=>out.test(x[1]))) state='out';
-  else{ const n=c.find(x=>!/auth|login|sign/i.test(x[0])&&!generic.test(x[1])&&x[1].length<=30); if(n){ state='in'; name=n[1]; } }
-  return {state,name,c:c.slice(0,15)};
+function runOnPage(url,fn,cb){ const t='t'+Date.now()+Math.random(); waiters[t]=cb; Android.runOnPage(url,'('+fn.toString()+')()',t); }
+function setAcct(state){ acct={state}; store.set('acct',JSON.stringify(acct)); }
+// Выполняется на странице uzum.uz при выходе: стирает данные сайта, сохранённые в приложении
+function wipeScript(){
+  const W=window; W.__t0=W.__t0||Date.now(); if((Date.now()-W.__t0)/1000<2) return null;
+  try{ localStorage.clear(); }catch(e){} try{ sessionStorage.clear(); }catch(e){}
+  return 'ok';
 }
-function whoScript(){
-  const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
-  if(el<4||(document.readyState!=='complete'&&el<12)) return null;
-  const w=W.__who(); if(!w.state&&el<10) return null;
-  return JSON.stringify(w);
-}
-function setAcct(w){ if(!w) return; acct={state:w.state||'',name:w.name||'',ts:Date.now(),c:w.c||[]}; store.set('acct',JSON.stringify(acct)); refresh(true); }
-function checkAcct(){ if(!CAN) return; runOnPage(WISHES,whoScript,r=>{ try{ setAcct(r&&JSON.parse(r)); }catch(e){} }); }
 function favScript(){
   const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
   if(document.readyState!=='complete'&&el<12) return null;
@@ -174,7 +163,7 @@ function favScript(){
     const url=new URL(a.getAttribute('href'),location.origin).href; if(seen[url]) continue; seen[url]=1;
     const img=c.querySelector('img');
     items.push({url, title:txt(c.querySelector('[data-test-id="product-card__title"]')), price:txt(c.querySelector('[data-test-id="product-card__actual-price"]')), image:img?(img.getAttribute('src')||''):''}); }
-  return JSON.stringify({items, empty, who:W.__who?W.__who():null});
+  return JSON.stringify({items, empty});
 }
 function diagScript(){
   const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
@@ -185,7 +174,6 @@ function diagScript(){
   let box=pe; for(let i=0;i<3&&box&&box.parentElement;i++) box=box.parentElement;
   out.priceBlock=clean(box).slice(0,3500);
   out.card=[...document.querySelectorAll('span,div,p')].filter(e=>e.children.length<=2&&/с картой|без карты|karta/i.test(e.textContent||'')&&(e.textContent||'').length<60&&!e.closest('[data-test-id^="product-card"]')).slice(0,3).map(e=>clean(e.parentElement&&e.parentElement.parentElement||e).slice(0,1500));
-  out.account=W.__who?W.__who():null;
   return JSON.stringify(out);
 }
 const pkey=u=>{ const m=u.match(/\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#]|$)/), s=u.match(/[?&]skuId=(\d+)/); return m?m[1]+':'+(s?s[1]:'0'):u; };
@@ -292,8 +280,8 @@ function viewSettings(){
   <div class="card"><h2>Уведомления</h2>
   <div class="setrow"><div>Сообщать об изменении количества<small>Если выключить — только цена и наличие</small></div><input type="checkbox" id="ns" aria-label="Сообщать об изменении количества" ${i.notify_stock?'checked':''}></div></div>
   <div class="card"><h2>Аккаунт Uzum</h2><p class="note">После входа монитор видит ваши цены и избранное. Номер и код вы вводите на сайте Uzum — приложение их не видит.</p>
-  ${acct.state==='in'?`<p class="note"><span class="ok">Вход выполнен</span>${acct.name?' · '+esc(acct.name):''}</p>`:''}
-  <div class="acts"><button class="ghost" type="button" id="login2">${acct.state==='in'?'Открыть Uzum':'Войти в Uzum'}</button>${CAN&&S.products.length?'<button class="ghost" type="button" id="diagb">Диагностика</button>':''}</div>
+  ${acct.state==='in'?'<p class="note"><span class="ok">Вход выполнен</span></p>':''}
+  <div class="acts"><button class="ghost" type="button" id="login2">${acct.state==='in'?'Открыть Uzum':'Войти в Uzum'}</button>${acct.state==='in'?'<button class="ghost" type="button" id="logout2">Выйти</button>':''}${CAN&&S.products.length?'<button class="ghost" type="button" id="diagb">Диагностика</button>':''}</div>
   ${diag?`<textarea readonly aria-label="Данные диагностики">${esc(diag)}</textarea><div class="acts"><button class="ghost" type="button" id="diagcopy">Скопировать</button><button class="ghost" type="button" id="diagclose">Закрыть</button></div>`:''}</div>
   <div class="ver">Приложение ${esc(i.app||'—')} · обновление №${esc(i.web||'—')}</div>`;
 }
@@ -303,43 +291,50 @@ function refresh(force){
   for(const p of s.products){ p.pending=s.pending.indexOf(p.id)>=0; if(!hist[p.id]||hist[p.id].checks.length!==p.checks_count) loadHist(p.id); }
   const fresh=events().filter(e=>e.ts>seenTs).length;
   if(tab==='changes'&&fresh){ seenTs=Math.floor(Date.now()/1000); store.set('seenTs',seenTs); }
-  const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,diag,fresh,acct.state,acct.name]);
+  const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,diag,fresh,acct.state]);
   if(key===lastKey&&!force) return; lastKey=key;
   $('#title').textContent=TITLES[tab];
-  const li=acct.state==='in'; $('#login').classList.toggle('in',li); $('#logintext').textContent=li?(acct.name||'Вы вошли'):'Войти в Uzum';
-  $('#login').setAttribute('aria-label',li?'Аккаунт Uzum: '+(acct.name||'вход выполнен'):'Войти в Uzum');
+  const li=acct.state==='in'; $('#login').classList.toggle('in',li); $('#logintext').textContent=li?'Выйти':'Войти в Uzum';
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const bd=$('#badge'); bd.hidden=!(fresh&&tab!=='changes'); bd.textContent=fresh>99?'99+':fresh;
   $('#fab').style.display=tab==='products'?'':'none';
   $('#view').innerHTML=tab==='products'?viewProducts():tab==='changes'?viewChanges():tab==='favorites'?viewFavorites():viewSettings();
 }
 window.refresh=refresh;
-// После возврата с экрана входа заново читаем избранное (или только аккаунт), чтобы кнопка в шапке обновилась
-window.onAppResume=()=>{ if(loginOpened){ loginOpened=false; if(tab==='favorites') loadFav(); else checkAcct(); } refresh(true); };
+// После возврата с экрана входа заново читаем избранное: по нему видно, выполнен ли вход
+window.onAppResume=()=>{ if(loginOpened){ loginOpened=false; if(CAN) loadFav(); } refresh(true); };
 function login(){ if(CAN){ loginOpened=true; Android.openUzum(WISHES); } else location.href=APK; }
 function loadFav(){ fav='loading'; favMsg=''; favSel={}; refresh(true);
   runOnPage(WISHES,favScript,r=>{ let d=null; try{ d=r&&JSON.parse(r); }catch(e){}
-    if(d&&d.who) setAcct(d.who);
+    if(d) setAcct(d.items.length?'in':'');
     if(!d){ fav=null; favMsg='Не удалось открыть избранное. Проверьте интернет и попробуйте ещё раз.'; }
-    else if(!d.items.length){ fav=null; favMsg='Избранное пусто. Если товары там есть — сначала нажмите «Войти в Uzum» вверху.'; }
+    else if(!d.items.length){ fav=null; favMsg='Избранное пусто. Если товары там есть — сначала войдите в Uzum (кнопка вверху).'; }
     else { fav=d.items; }
     refresh(true); }); }
-function openMenu(id){ menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
+function openAcct(){ acctMenu=true; menuId=null;
+  $('#menubody').innerHTML=`<h2>Аккаунт Uzum</h2><p class="note">Вход выполнен. После выхода монитор перестанет видеть ваши цены и избранное, пока вы не войдёте снова.</p>
+  <button class="item" type="button" data-act="uzum">Открыть Uzum</button>
+  ${CANOUT?'<button class="item danger" type="button" data-act="logout">Выйти из аккаунта</button>':`<a class="item" href="${APK}">Для выхода нужна новая версия приложения — скачать</a>`}`;
+  $('#menu').hidden=false; }
+function logout(){ if(!CANOUT||outBusy) return; outBusy=true;
+  runOnPage(WISHES,wipeScript,()=>{ Android.logoutUzum(); outBusy=false; setAcct(''); fav=null; favSel={}; favMsg='Вы вышли из аккаунта Uzum.'; refresh(true); }); }
+function openMenu(id){ acctMenu=false; menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
 function drawMenu(){ const p=S.products.find(x=>x.id===menuId); if(!p){ $('#menu').hidden=true; return; }
   $('#menubody').innerHTML=`<h2>${esc(p.name||'Товар')}</h2>
   <button class="item" type="button" data-act="check">Проверить сейчас</button>
   <button class="item" type="button" data-act="hist">${open[p.id]?'Скрыть историю':'История и график'}</button>
   <button class="item" type="button" data-act="site">Открыть на Uzum</button>
   <button class="item danger" type="button" data-act="del">${menuSure?'Точно удалить вместе с историей?':'Удалить'}</button>`; }
-$('#login').addEventListener('click',login);
+$('#login').addEventListener('click',()=>{ if(acct.state==='in') openAcct(); else login(); });
 $('#nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; tab=b.dataset.tab; window.scrollTo(0,0);
   if(tab==='favorites'&&CAN&&!fav) loadFav(); else refresh(true); });
 $('#fab').addEventListener('click',()=>{ $('#msg').textContent=''; $('#addsheet').hidden=false; $('#u').focus(); });
 $('#addclose').addEventListener('click',()=>{ $('#addsheet').hidden=true; });
 $('#addsheet').addEventListener('click',e=>{ if(e.target.id==='addsheet') $('#addsheet').hidden=true; });
 $('#menu').addEventListener('click',e=>{ if(e.target.id==='menu'){ $('#menu').hidden=true; return; }
-  const b=e.target.closest('button'); if(!b) return; const p=S.products.find(x=>x.id===menuId); if(!p) return;
-  const a=b.dataset.act;
+  const b=e.target.closest('button'); if(!b) return; const a=b.dataset.act;
+  if(acctMenu){ $('#menu').hidden=true; if(a==='uzum') login(); if(a==='logout') logout(); return; }
+  const p=S.products.find(x=>x.id===menuId); if(!p) return;
   if(a==='del'&&!menuSure){ menuSure=true; drawMenu(); return; }
   if(a==='check') call('check',p.id);
   if(a==='hist') open[p.id]=!open[p.id];
@@ -363,6 +358,7 @@ $('#view').addEventListener('click',e=>{
       favSel={}; favMsg=n?`Добавлено товаров: ${n}. Идёт первая проверка — смотрите вкладку «Товары».`:''; refresh(true); }
     if(b.dataset.s) call('openSettings',b.dataset.s);
     if(b.id==='login2') login();
+    if(b.id==='logout2') openAcct();
     if(b.id==='diagb'){ diag='Собираю данные…'; refresh(true); runOnPage(S.products[0].url,diagScript,r=>{ diag=r||'Страница не ответила.'; refresh(true); }); }
     if(b.id==='diagcopy'){ Android.copy(diag); b.textContent='Скопировано'; }
     if(b.id==='diagclose'){ diag=''; refresh(true); }
@@ -375,6 +371,4 @@ $('#view').addEventListener('change',e=>{ const t=e.target;
   if(t.dataset.f){ favSel[t.dataset.f]=t.checked; refresh(true); }
   if(t.id==='ns'){ call('setPref','notify_stock',t.checked?'1':'0'); refresh(true); } });
 refresh(true); setInterval(refresh,3000);
-// Раз в 6 часов при запуске уточняем, выполнен ли вход в Uzum
-if(CAN&&Date.now()-(acct.ts||0)>6*3600*1000) setTimeout(checkAcct,2000);
 </script></body></html>
