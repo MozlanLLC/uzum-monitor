@@ -40,7 +40,7 @@ public class Store extends SQLiteOpenHelper {
     private final Context ctx;
 
     private Store(Context c) {
-        super(c, "monitor.db", null, 1);
+        super(c, "monitor.db", null, 2);
         ctx = c;
     }
 
@@ -53,16 +53,20 @@ public class Store extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE products(id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT NOT NULL, "
                 + "product_id INTEGER NOT NULL, sku_id INTEGER NOT NULL DEFAULT 0, name TEXT DEFAULT '', "
                 + "image TEXT DEFAULT '', seller TEXT DEFAULT '', variant TEXT DEFAULT '', price INTEGER, "
-                + "old_price INTEGER, in_stock INTEGER, stock INTEGER, added_at INTEGER, last_try INTEGER, "
+                + "old_price INTEGER, card_price INTEGER, in_stock INTEGER, stock INTEGER, added_at INTEGER, last_try INTEGER, "
                 + "last_ok INTEGER, status TEXT DEFAULT 'new', error TEXT DEFAULT '', warning TEXT DEFAULT '')");
         db.execSQL("CREATE TABLE checks(id INTEGER PRIMARY KEY AUTOINCREMENT, product INTEGER NOT NULL, "
-                + "ts INTEGER NOT NULL, price INTEGER, old_price INTEGER, in_stock INTEGER, stock INTEGER, "
+                + "ts INTEGER NOT NULL, price INTEGER, old_price INTEGER, card_price INTEGER, in_stock INTEGER, stock INTEGER, "
                 + "event TEXT DEFAULT '')");
         db.execSQL("CREATE INDEX ix_checks ON checks(product, ts)");
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE products ADD COLUMN card_price INTEGER");
+            db.execSQL("ALTER TABLE checks ADD COLUMN card_price INTEGER");
+        }
     }
 
     // ───────── ссылки ─────────
@@ -156,7 +160,7 @@ public class Store extends SQLiteOpenHelper {
     public JSONArray history(long id) {
         JSONArray out = new JSONArray();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT ts, price, old_price, in_stock, stock, event FROM checks WHERE product=? ORDER BY ts, id",
+                "SELECT ts, price, old_price, card_price, in_stock, stock, event FROM checks WHERE product=? ORDER BY ts, id",
                 new String[]{String.valueOf(id)})) {
             while (c.moveToNext()) out.put(row(c));
         }
@@ -212,19 +216,21 @@ public class Store extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         String[] a = {String.valueOf(id)};
         boolean hasPrev = false, prevInStock = false;
-        long prevPrice = 0, prevStock = -1;
+        long prevPrice = 0, prevStock = -1, prevCard = 0;
         try (Cursor c = db.rawQuery(
-                "SELECT price, in_stock, stock FROM checks WHERE product=? ORDER BY ts DESC, id DESC LIMIT 1", a)) {
+                "SELECT price, in_stock, stock, card_price FROM checks WHERE product=? ORDER BY ts DESC, id DESC LIMIT 1", a)) {
             if (c.moveToFirst()) {
                 hasPrev = true;
                 prevPrice = c.isNull(0) ? 0 : c.getLong(0);
                 prevInStock = !c.isNull(1) && c.getLong(1) != 0;
                 prevStock = c.isNull(2) ? -1 : c.getLong(2);
+                prevCard = c.isNull(3) ? 0 : c.getLong(3);
             }
         }
         long price = res.optLong("price", 0);
         if (price <= 0 && hasPrev) price = prevPrice;   // товара нет — помним последнюю известную цену
         long oldPrice = res.optLong("old_price", 0);
+        long cardPrice = res.optLong("card_price", 0);
         boolean inStock = res.optBoolean("in_stock", false);
         long stock = res.isNull("stock") ? -1 : res.optLong("stock", -1);
 
@@ -245,6 +251,11 @@ public class Store extends SQLiteOpenHelper {
                 ev.add(s);
                 nt.add(s);
             }
+            if (prevCard > 0 && cardPrice > 0 && prevCard != cardPrice) {
+                String s = "Цена с картой Uzum: " + money(prevCard) + " → " + money(cardPrice);
+                ev.add(s);
+                nt.add(s);
+            }
             if (prevInStock && inStock && prevStock >= 0 && stock >= 0 && prevStock != stock) {
                 String s = "Количество: " + prevStock + " → " + stock + " шт";
                 ev.add(s);
@@ -259,6 +270,7 @@ public class Store extends SQLiteOpenHelper {
         k.put("ts", now());
         putOrNull(k, "price", price);
         putOrNull(k, "old_price", oldPrice);
+        putOrNull(k, "card_price", cardPrice);
         k.put("in_stock", inStock ? 1 : 0);
         if (stock >= 0) k.put("stock", stock); else k.putNull("stock");
         k.put("event", ch.event);
@@ -272,6 +284,7 @@ public class Store extends SQLiteOpenHelper {
         v.put("variant", res.optString("variant"));
         putOrNull(v, "price", price);
         putOrNull(v, "old_price", oldPrice);
+        putOrNull(v, "card_price", cardPrice);
         v.put("in_stock", inStock ? 1 : 0);
         if (stock >= 0) v.put("stock", stock); else v.putNull("stock");
         v.put("last_try", now());

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "files": ["ui.html", "extract.js"],
-  "notes": "Первая версия"
+  "notes": "Вход в Uzum, избранное, цена с картой"
 }

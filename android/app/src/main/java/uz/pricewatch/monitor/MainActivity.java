@@ -13,6 +13,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 public class MainActivity extends Activity {
 
     private static final String UI_BASE = "https://app.uzum-monitor.invalid/";
@@ -94,6 +96,13 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Не удалось добавить товар", Toast.LENGTH_LONG).show();
         }
         refreshUi();
+    }
+
+    /** Передаёт интерфейсу ответ фоновой страницы (см. Bridge.runOnPage). */
+    void deliver(String token, String result) {
+        if (web == null) return;
+        web.evaluateJavascript("window.onPageResult&&window.onPageResult(" + JSONObject.quote(token) + ","
+                + (result == null ? "null" : JSONObject.quote(result)) + ")", null);
     }
 
     private void refreshUi() {

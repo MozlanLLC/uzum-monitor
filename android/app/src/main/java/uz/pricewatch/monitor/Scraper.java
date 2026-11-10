@@ -104,7 +104,7 @@ public class Scraper {
                                 boolean verdict = d.optLong("price", 0) > 0 || d.optBoolean("soldOutText");
                                 String key = d.optString("name") + "|" + d.optLong("price", 0) + "|" + d.optLong("oldPrice", 0)
                                         + "|" + d.optBoolean("canBuy") + "|" + d.optLong("stock", -1) + "|" + d.optString("image")
-                                        + "|" + d.optString("retailerId");
+                                        + "|" + d.optString("retailerId") + "|" + d.optLong("cardPrice", 0);
                                 if (verdict && key.equals(run.prevKey)) {
                                     if (++run.stable >= 3) {
                                         finish(d, productId, skuId, cb);
@@ -203,6 +203,8 @@ public class Scraper {
             res.put("name", name);
             res.put("price", price);
             res.put("old_price", d.optLong("oldPrice", 0));
+            long card = d.optLong("cardPrice", 0);
+            res.put("card_price", card > 0 && card < price ? card : 0);
             res.put("in_stock", inStock);
             if (!inStock) res.put("stock", 0);
             else if (d.isNull("stock")) res.put("stock", JSONObject.NULL);

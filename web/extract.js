@@ -30,6 +30,23 @@
     }
   }
 
+  // Цена «с картой Uzum» видна только после входа в аккаунт. Ищем подпись «с картой»
+  // вне карточек похожих товаров и берём число рядом с ней.
+  let cardPrice = null;
+  if (price) {
+    const labels = [...document.querySelectorAll('span,div,p,b,strong')].filter(e =>
+      e.children.length <= 2 && /с картой|karta bilan|kartasi bilan/i.test(e.textContent || '') &&
+      (e.textContent || '').length < 60 && !e.closest('[data-test-id^="product-card"],[data-test-id="block__offer"],[data-test-id="list__products"]'));
+    for (const lab of labels) {
+      let box = lab;
+      for (let i = 0; i < 3 && box && cardPrice === null; i++, box = box.parentElement) {
+        const m = txt(box).match(/(\d[\d\s\u00a0\u202f]{3,})\s*(?:сум|so.m)?\s*(?:с картой|karta)/i);
+        if (m) { const n = num(m[1]); if (n && n < price && n > price * 0.3) cardPrice = n; }
+      }
+      if (cardPrice !== null) break;
+    }
+  }
+
   let image = '';
   const photos = q('block__product-photos');
   if (photos) {
@@ -66,7 +83,7 @@
     href: location.href,
     ready: document.readyState,
     name: txt(nameEl),
-    price: price, oldPrice: oldPrice, image: image, ogImage: ogImage,
+    price: price, oldPrice: oldPrice, cardPrice: cardPrice, image: image, ogImage: ogImage,
     seller: txt(q('text__shop-title')),
     variant: txt(q('text__selected-sku-value')),
     stock: stock, canBuy: canBuy, soldOutText: soldOutText,

@@ -2,6 +2,8 @@ package uz.pricewatch.monitor;
 
 import android.Manifest;
 import android.app.NotificationManager;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -121,6 +123,49 @@ public class Bridge {
                 }
             }
         });
+    }
+
+    /** Открывает сайт Uzum на отдельном экране — для входа в аккаунт. */
+    @JavascriptInterface
+    public void openUzum(final String url) {
+        act.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                act.startActivity(new Intent(act, BrowserActivity.class).putExtra("url", url));
+            }
+        });
+    }
+
+    /**
+     * Выполняет скрипт на странице uzum.uz в фоне; ответ приходит в window.onPageResult(token, result).
+     * Скрипт должен вернуть строку, когда готов, и null — пока страница не загрузилась.
+     */
+    @JavascriptInterface
+    public void runOnPage(final String url, final String js, final String token) {
+        act.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (!BrowserActivity.isUzum(url)) {
+                    act.deliver(token, null);
+                    return;
+                }
+                PageRunner.run(act, url, js, 35000, new PageRunner.Callback() {
+                    @Override
+                    public void done(String result) {
+                        act.deliver(token, result);
+                    }
+                });
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void copy(String text) {
+        try {
+            ClipboardManager cm = act.getSystemService(ClipboardManager.class);
+            cm.setPrimaryClip(ClipData.newPlainText("Uzum Монитор", text));
+        } catch (Exception ignored) {
+        }
     }
 
     private static String error(String message) {
