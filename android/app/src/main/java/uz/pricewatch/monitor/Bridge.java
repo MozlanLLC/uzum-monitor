@@ -172,7 +172,13 @@ public class Bridge {
         });
     }
 
-    /** Открывает сайт Uzum на отдельном экране — для входа в аккаунт. */
+    /** Сайты, за товарами которых умеет следить эта сборка: по этому списку интерфейс узнаёт о поддержке. */
+    @JavascriptInterface
+    public String sites() {
+        return "uzum,ozon,wb";
+    }
+
+    /** Открывает сайт (Uzum, Ozon, Wildberries) на отдельном экране — для входа в личный кабинет. */
     @JavascriptInterface
     public void openUzum(final String url) {
         act.runOnUiThread(new Runnable() {
@@ -183,7 +189,7 @@ public class Bridge {
         });
     }
 
-    /** Выход из аккаунта Uzum: удаляет cookie сайта, сохранённые в приложении. */
+    /** Выход из личных кабинетов: удаляет cookie всех сайтов, сохранённые в приложении. */
     @JavascriptInterface
     public void logoutUzum() {
         act.runOnUiThread(new Runnable() {
@@ -208,7 +214,7 @@ public class Bridge {
         act.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                if (!BrowserActivity.isUzum(url)) {
+                if (!Sites.allowed(url)) {
                     act.deliver(token, null);
                     return;
                 }

@@ -4,43 +4,96 @@
 const Core = (() => {
   class UserError extends Error {}
 
-  const LINK = /https?:\/\/(?:www\.)?uzum\.uz\/[^\s"'<>]+/i;
-  const BARE = /(?:^|\s)((?:www\.)?uzum\.uz\/[^\s"'<>]+)/i;
-  const PRODUCT_PATH = /\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#].*)?$/;
-  const SKU = /[?&]skuId=(\d+)/;
-  const IMAGES = 'https://images.uzum.uz/';
-
   const now = () => Math.floor(Date.now() / 1000);
   const money = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' сум';
   const int = v => { const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) : 0; };
   const posOrNull = n => (n > 0 ? n : null);
 
-  /** Находит ссылку на товар в тексте. */
+  // ───────── сайты ─────────
+  // У каждого сайта: как узнать ссылку на товар, как привести её к одному виду, чем читать страницу
+  // и с каких адресов разрешены картинки. То же описано в Sites.java приложения для Android.
+  const SKU = /[?&]skuId=(\d+)/;
+  const SITES = {
+    uzum: {
+      name: 'Uzum', extract: 'extract.js', image: /^https:\/\/images\.uzum\.uz\//,
+      path: /\/product\/(?:[^\/?#]*?-)?(\d+)\/?(?:[?#].*)?$/,
+      hint: 'uzum.uz/ru/product/название-123456',
+      clean(url, m) {
+        const s = url.match(SKU), skuId = s ? Number(s[1]) : 0;
+        const q = url.indexOf('?');
+        let path = (q >= 0 ? url.slice(0, q) : url).replace(/^https?:\/\/(?:www\.)?uzum\.uz/i, 'https://uzum.uz');
+        while (path.endsWith('/')) path = path.slice(0, -1);
+        return { url: skuId ? path + '?skuId=' + skuId : path, productId: Number(m[1]), skuId };
+      },
+    },
+    ozon: {
+      name: 'Ozon', extract: 'extract-ozon.js', image: /^https:\/\/(?:ir(?:-\d+)?|cdn\d*)\.ozone\.ru\//,
+      path: /\/product\/(?:[^\/?#]*-)?(\d+)\/?(?:[?#].*)?$/,
+      hint: 'ozon.uz/product/название-123456',
+      clean(url, m) {
+        // хвост после «?» сайт дописывает сам при каждом открытии — в ссылке он не нужен
+        const q = url.indexOf('?');
+        let path = (q >= 0 ? url.slice(0, q) : url).replace(/^https?:\/\/(?:www\.)?ozon\.uz/i, 'https://www.ozon.uz');
+        while (path.endsWith('/')) path = path.slice(0, -1);
+        return { url: path + '/', productId: Number(m[1]), skuId: 0 };
+      },
+    },
+    wb: {
+      name: 'Wildberries', extract: 'extract-wb.js', image: /^https:\/\/[a-z0-9-]+\.(?:wbbasket\.ru|wbcontent\.net)\//,
+      path: /\/catalog\/(\d+)\/detail\.aspx(?:[?#].*)?$/,
+      hint: 'wildberries.uz/catalog/123456/detail.aspx',
+      clean(url, m) {
+        // размер — отдельный товар для слежения: у размеров бывают разные цены и остатки
+        const s = url.match(/[?&]size=(\d+)/), skuId = s ? Number(s[1]) : 0;
+        const base = 'https://www.wildberries.uz/catalog/' + m[1] + '/detail.aspx';
+        return { url: skuId ? base + '?size=' + skuId : base, productId: Number(m[1]), skuId };
+      },
+    },
+  };
+  const HOSTS = { 'uzum.uz': 'uzum', 'ozon.uz': 'ozon', 'wildberries.uz': 'wb' };
+  const LINK = /https?:\/\/(?:www\.)?(uzum\.uz|ozon\.uz|wildberries\.uz)\/[^\s"'<>]+/i;
+  const BARE = /(?:^|\s)((?:www\.)?(uzum\.uz|ozon\.uz|wildberries\.uz)\/[^\s"'<>]+)/i;
+  const siteOf = p => (p && SITES[p.site] ? p.site : 'uzum');
+
+  /** Находит ссылку на товар в тексте. Возвращает {site, url, productId, skuId}. */
   function parseUrl(text) {
     const t = (text == null ? '' : String(text)).trim();
     if (!t) throw new UserError('Вставьте ссылку на товар.');
-    let url;
+    let url, host;
     const m = t.match(LINK);
     if (m) {
-      url = m[0];
+      url = m[0]; host = m[1];
     } else {
       const b = t.match(BARE);
-      if (!b) throw new UserError('Это не ссылка на uzum.uz.');
-      url = 'https://' + b[1];
+      if (!b) throw new UserError('Это не ссылка на Uzum, Ozon или Wildberries.');
+      url = 'https://' + b[1]; host = b[2];
     }
     const hash = url.indexOf('#');
     if (hash >= 0) url = url.slice(0, hash);
-    const p = url.match(PRODUCT_PATH);
-    if (!p) throw new UserError('Не похоже на ссылку товара. Нужна ссылка вида uzum.uz/ru/product/название-123456');
-    const s = url.match(SKU);
-    const skuId = s ? Number(s[1]) : 0;
-    const q = url.indexOf('?');
-    let path = (q >= 0 ? url.slice(0, q) : url).replace(/^https?:\/\/(?:www\.)?uzum\.uz/i, 'https://uzum.uz');
-    while (path.endsWith('/')) path = path.slice(0, -1);
-    return { url: skuId ? path + '?skuId=' + skuId : path, productId: Number(p[1]), skuId };
+    const site = HOSTS[host.toLowerCase()], def = SITES[site];
+    const p = url.match(def.path);
+    if (!p) throw new UserError('Не похоже на ссылку товара. Нужна ссылка вида ' + def.hint);
+    return Object.assign({ site }, def.clean(url, p));
   }
 
-  const pageProductId = href => { const m = String(href || '').match(PRODUCT_PATH); return m ? Number(m[1]) : -1; };
+  /** Номер товара, чья страница открыта, или -1. */
+  function pageProductId(site, href) {
+    const def = SITES[site] || SITES.uzum;
+    const h = String(href || '');
+    const hash = h.indexOf('#');
+    const m = (hash >= 0 ? h.slice(0, hash) : h).match(def.path);
+    return m ? Number(m[1]) : -1;
+  }
+
+  /** Адрес принадлежит одному из поддерживаемых сайтов (для скрытых страниц и входа). */
+  function allowedUrl(url) {
+    try {
+      const u = new URL(url);
+      return u.protocol === 'https:' && Object.keys(HOSTS).some(h => u.hostname === h || u.hostname.endsWith('.' + h));
+    } catch (e) {
+      return false;
+    }
+  }
 
   /** Номер новой записи: по времени, чтобы интерфейс и фоновый скрипт не выдали одинаковый. */
   function newId(existingIds) {
@@ -49,15 +102,15 @@ const Core = (() => {
     return t > max ? t : max + 1;
   }
 
-  const sameProduct = (p, productId, skuId) => Number(p.product_id) === productId && Number(p.sku_id || 0) === skuId;
+  const sameProduct = (p, u) => siteOf(p) === u.site && Number(p.product_id) === u.productId && Number(p.sku_id || 0) === u.skuId;
 
   function newProduct(text, existing, id) {
     const u = parseUrl(text);
-    if (existing.some(p => sameProduct(p, u.productId, u.skuId))) throw new UserError('Этот товар уже отслеживается.');
+    if (existing.some(p => sameProduct(p, u))) throw new UserError('Этот товар уже отслеживается.');
     return {
-      id, url: u.url, product_id: u.productId, sku_id: u.skuId, name: '', image: '', seller: '', variant: '',
+      id, site: u.site, url: u.url, product_id: u.productId, sku_id: u.skuId, name: '', image: '', seller: '', variant: '',
       price: null, old_price: null, card_price: null, in_stock: null, stock: null, added_at: now(),
-      last_try: null, last_ok: null, status: 'new', error: '', warning: '', target_price: null,
+      last_try: null, last_ok: null, status: 'new', error: '', warning: '', target_price: null, sizes: null,
     };
   }
 
@@ -72,8 +125,9 @@ const Core = (() => {
   const norm = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase();
 
   /** Перекрёстные проверки: это точно тот товар? Возвращает {status:'ok',res} или {status:'error',message}. */
-  function finish(d, productId, skuId) {
+  function finish(d, site, productId, skuId) {
     try {
+      const allowed = (SITES[site] || SITES.uzum).image;
       const retailer = String(d.retailerId || '');
       if (/^\d+$/.test(retailer) && Number(retailer) !== productId) {
         return { status: 'error', message: 'Данные страницы относятся к другому товару (id ' + retailer + ').' };
@@ -84,8 +138,8 @@ const Core = (() => {
       if (ogTitle && !ogTitle.startsWith(head)) {
         return { status: 'error', message: 'Название на странице не совпало со служебным заголовком — данные не записаны.' };
       }
-      let warning = '';
-      if (skuId > 0) {
+      let warning = String(d.warning || '').slice(0, 200);
+      if (site === 'uzum' && skuId > 0) {
         const m = String(d.href || '').match(SKU);
         if (m && Number(m[1]) !== skuId) {
           warning = 'Сайт переключил вариант товара (skuId ' + m[1] + ' вместо ' + skuId + ').';
@@ -94,15 +148,19 @@ const Core = (() => {
       const price = int(d.price);
       const inStock = price > 0 && !!d.canBuy && !d.soldOutText;
       let image = String(d.image || '');
-      if (!image.startsWith(IMAGES)) image = String(d.ogImage || '');
-      if (!image.startsWith(IMAGES)) image = '';
+      if (!allowed.test(image)) image = String(d.ogImage || '');
+      if (!allowed.test(image)) image = '';
+      // размеры (Wildberries): из них пользователь выбирает, за каким следить
+      const sizes = Array.isArray(d.sizes) ? d.sizes.slice(0, 60).filter(x => x && int(x.id) > 0).map(x => ({
+        id: int(x.id), name: String(x.name || '').slice(0, 40), price: posOrNull(int(x.price)), qty: Math.max(0, int(x.qty)),
+      })) : [];
       const card = int(d.cardPrice);
       return {
         status: 'ok',
         res: {
           name, price, old_price: int(d.oldPrice), card_price: card > 0 && card < price ? card : 0, in_stock: inStock,
           stock: !inStock ? 0 : d.stock == null ? null : int(d.stock), image, seller: String(d.seller || ''),
-          variant: String(d.variant || ''), warning,
+          variant: String(d.variant || ''), warning, sizes: sizes.length > 1 ? sizes : null,
         },
       };
     } catch (e) {
@@ -111,18 +169,18 @@ const Core = (() => {
   }
 
   /** Время вышло: что делать с тем, что успели прочитать. last — последнее чтение нужного товара, any — любое. */
-  function onTimeout(last, any, productId, skuId) {
+  function onTimeout(last, any, site, productId, skuId) {
     if (!last || !last.name) {
       if (any && any.blocked) {
         return { status: 'error', message: 'Сайт показал проверку «вы не робот». Откройте товар в браузере и попробуйте позже.' };
       }
-      if (any && pageProductId(any.href) !== productId && String(any.href || '').startsWith('http')) {
+      if (any && pageProductId(site, any.href) !== productId && String(any.href || '').startsWith('http')) {
         return { status: 'error', message: 'Сайт открыл другую страницу вместо товара.' };
       }
       return { status: 'error', message: 'Карточка товара не загрузилась (нет интернета или сайт недоступен).' };
     }
     if (int(last.price) <= 0 && last.canBuy) return { status: 'error', message: 'Не удалось прочитать цену на странице.' };
-    return finish(last, productId, skuId);   // название есть, цены и кнопки «В корзину» нет — товара нет в наличии
+    return finish(last, site, productId, skuId);   // название есть, цены и кнопки «В корзину» нет — товара нет в наличии
   }
 
   // ───────── результат проверки (Store.saveResult) ─────────
@@ -162,7 +220,7 @@ const Core = (() => {
         ev.push(s); if (!quiet) nt.push(s);
       }
       if (prevCard > 0 && cardPrice > 0 && prevCard !== cardPrice) {
-        const s = 'Цена с картой Uzum: ' + money(prevCard) + ' → ' + money(cardPrice);
+        const s = 'Цена с картой: ' + money(prevCard) + ' → ' + money(cardPrice);
         ev.push(s); if (!quiet) nt.push(s);
       }
       if (reached && !prevReached) { const s = 'Цена не выше желаемой (' + money(target) + ')'; ev.push(s); nt.push(s); }
@@ -180,6 +238,7 @@ const Core = (() => {
       name: res.name || '', seller: res.seller || '', variant: res.variant || '',
       price: check.price, old_price: check.old_price, card_price: check.card_price, in_stock: check.in_stock,
       stock: check.stock, last_try: ts, last_ok: ts, status: 'ok', error: '', warning: res.warning || '',
+      sizes: res.sizes || null,
     });
     if (res.image) next.image = res.image;
     return { product: next, check, event, notify: prev ? nt.join('; ') : '' };
@@ -217,11 +276,11 @@ const Core = (() => {
     for (const p of data.products) {
       let u = null;
       try { if (p && typeof p === 'object') u = parseUrl(p.url); } catch (e) { /* не ссылка на товар */ }
-      if (!u || all.some(x => sameProduct(x, u.productId, u.skuId))) { skipped++; continue; }
+      if (!u || all.some(x => sameProduct(x, u))) { skipped++; continue; }
       const image = text(p, 'image', 500), status = text(p, 'status', 20);
       const product = {
-        id: newId(all.map(x => x.id)), url: u.url, product_id: u.productId, sku_id: u.skuId,
-        name: text(p, 'name', 300), image: image.startsWith(IMAGES) ? image : '', seller: text(p, 'seller', 200),
+        id: newId(all.map(x => x.id)), site: u.site, url: u.url, product_id: u.productId, sku_id: u.skuId, sizes: null,
+        name: text(p, 'name', 300), image: SITES[u.site].image.test(image) ? image : '', seller: text(p, 'seller', 200),
         variant: text(p, 'variant', 200), added_at: numOrNull(p.added_at), last_try: numOrNull(p.last_try),
         last_ok: numOrNull(p.last_ok), target_price: numOrNull(p.target_price),
         status: /^(new|ok|error|not_found)$/.test(status) ? status : 'new', error: text(p, 'error', 500),
@@ -242,7 +301,7 @@ const Core = (() => {
     return { items, added: items.length, skipped };
   }
 
-  return { UserError, parseUrl, pageProductId, newId, newProduct, stableKey, finish, onTimeout, applyResult, withError,
+  return { UserError, SITES, siteOf, allowedUrl, parseUrl, pageProductId, newId, newProduct, stableKey, finish, onTimeout, applyResult, withError,
     withNotFound, NOT_FOUND, exportData, importData, money, now };
 })();
 

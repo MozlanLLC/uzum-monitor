@@ -17,7 +17,7 @@ const version = args.find(a => !a.startsWith('--')) || process.env.EXT_VERSION |
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 cpSync(join(here, 'src'), dist, { recursive: true });
-cpSync(join(web, 'extract.js'), join(dist, 'extract.js'));
+for (const f of ['extract.js', 'extract-ozon.js', 'extract-wb.js']) cpSync(join(web, f), join(dist, f));
 
 const html = readFileSync(join(web, 'ui.html'), 'utf8');
 const m = html.match(/<script>([\s\S]*)<\/script>/);

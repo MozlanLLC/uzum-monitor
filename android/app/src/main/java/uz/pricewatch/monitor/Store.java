@@ -14,8 +14,6 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /** Хранилище: товары и история проверок. */
 public class Store extends SQLiteOpenHelper {
@@ -40,7 +38,7 @@ public class Store extends SQLiteOpenHelper {
     private final Context ctx;
 
     private Store(Context c) {
-        super(c, "monitor.db", null, 3);
+        super(c, "monitor.db", null, 4);
         ctx = c;
     }
 
@@ -55,7 +53,7 @@ public class Store extends SQLiteOpenHelper {
                 + "image TEXT DEFAULT '', seller TEXT DEFAULT '', variant TEXT DEFAULT '', price INTEGER, "
                 + "old_price INTEGER, card_price INTEGER, in_stock INTEGER, stock INTEGER, added_at INTEGER, last_try INTEGER, "
                 + "last_ok INTEGER, status TEXT DEFAULT 'new', error TEXT DEFAULT '', warning TEXT DEFAULT '', "
-                + "target_price INTEGER)");
+                + "target_price INTEGER, site TEXT NOT NULL DEFAULT 'uzum', sizes TEXT)");
         db.execSQL("CREATE TABLE checks(id INTEGER PRIMARY KEY AUTOINCREMENT, product INTEGER NOT NULL, "
                 + "ts INTEGER NOT NULL, price INTEGER, old_price INTEGER, card_price INTEGER, in_stock INTEGER, stock INTEGER, "
                 + "event TEXT DEFAULT '')");
@@ -71,53 +69,27 @@ public class Store extends SQLiteOpenHelper {
         if (oldVersion < 3) {
             db.execSQL("ALTER TABLE products ADD COLUMN target_price INTEGER");
         }
+        if (oldVersion < 4) {
+            // другие сайты (Ozon, Wildberries) и размеры товара Wildberries
+            db.execSQL("ALTER TABLE products ADD COLUMN site TEXT NOT NULL DEFAULT 'uzum'");
+            db.execSQL("ALTER TABLE products ADD COLUMN sizes TEXT");
+        }
     }
 
     // ───────── ссылки ─────────
 
-    private static final Pattern LINK = Pattern.compile("https?://(?:www\\.)?uzum\\.uz/[^\\s\"'<>]+", Pattern.CASE_INSENSITIVE);
-    private static final Pattern BARE = Pattern.compile("(?:^|\\s)((?:www\\.)?uzum\\.uz/[^\\s\"'<>]+)", Pattern.CASE_INSENSITIVE);
-    public static final Pattern PRODUCT_PATH = Pattern.compile("/product/(?:[^/?#]*?-)?(\\d+)/?(?:[?#].*)?$");
-    private static final Pattern SKU = Pattern.compile("[?&]skuId=(\\d+)");
-
-    /** Находит ссылку на товар в тексте. Возвращает {ссылка, id товара, id варианта или "0"}. */
+    /** Находит ссылку на товар в тексте. Возвращает {ссылка, id товара, id варианта или "0", сайт}. */
     public static String[] parseUrl(String text) throws UserException {
-        String t = text == null ? "" : text.trim();
-        if (t.isEmpty()) throw new UserException("Вставьте ссылку на товар.");
-        String url;
-        Matcher m = LINK.matcher(t);
-        if (m.find()) {
-            url = m.group();
-        } else {
-            Matcher b = BARE.matcher(t);
-            if (!b.find()) throw new UserException("Это не ссылка на uzum.uz.");
-            url = "https://" + b.group(1);
-        }
-        int hash = url.indexOf('#');
-        if (hash >= 0) url = url.substring(0, hash);
-        Matcher p = PRODUCT_PATH.matcher(url);
-        if (!p.find()) {
-            throw new UserException("Не похоже на ссылку товара. Нужна ссылка вида uzum.uz/ru/product/название-123456");
-        }
-        String productId = p.group(1);
-        Matcher s = SKU.matcher(url);
-        String sku = s.find() ? s.group(1) : "0";
-        int q = url.indexOf('?');
-        String path = q >= 0 ? url.substring(0, q) : url;
-        path = path.replaceFirst("^(?i)https?://(?:www\\.)?uzum\\.uz", "https://uzum.uz");
-        while (path.endsWith("/")) path = path.substring(0, path.length() - 1);
-        String clean = "0".equals(sku) ? path : path + "?skuId=" + sku;
-        return new String[]{clean, productId, sku};
+        Sites.Link l = Sites.parse(text);
+        return new String[]{l.url, String.valueOf(l.productId), String.valueOf(l.skuId), l.site};
     }
 
     public long addProduct(String text) throws UserException {
         String[] u = parseUrl(text);
         SQLiteDatabase db = getWritableDatabase();
-        try (Cursor c = db.rawQuery("SELECT id FROM products WHERE product_id=? AND sku_id=?",
-                new String[]{u[1], u[2]})) {
-            if (c.moveToFirst()) throw new UserException("Этот товар уже отслеживается.");
-        }
+        if (exists(db, u[3], u[1], u[2])) throw new UserException("Этот товар уже отслеживается.");
         ContentValues v = new ContentValues();
+        v.put("site", u[3]);
         v.put("url", u[0]);
         v.put("product_id", Long.parseLong(u[1]));
         v.put("sku_id", Long.parseLong(u[2]));
@@ -273,7 +245,7 @@ public class Store extends SQLiteOpenHelper {
                 if (!quiet) nt.add(s);
             }
             if (prevCard > 0 && cardPrice > 0 && prevCard != cardPrice) {
-                String s = "Цена с картой Uzum: " + money(prevCard) + " → " + money(cardPrice);
+                String s = "Цена с картой: " + money(prevCard) + " → " + money(cardPrice);
                 ev.add(s);
                 if (!quiet) nt.add(s);
             }
@@ -318,6 +290,8 @@ public class Store extends SQLiteOpenHelper {
         v.put("status", "ok");
         v.put("error", "");
         v.put("warning", res.optString("warning"));
+        JSONArray sizes = res.optJSONArray("sizes");
+        if (sizes != null && sizes.length() > 1) v.put("sizes", sizes.toString()); else v.putNull("sizes");
         db.update("products", v, "id=?", a);
         return ch;
     }
@@ -345,6 +319,7 @@ public class Store extends SQLiteOpenHelper {
                 JSONObject p = row(c);
                 long id = p.optLong("id");
                 p.remove("id");
+                p.remove("sizes");
                 p.put("checks", history(id));
                 ps.put(p);
             }
@@ -370,17 +345,18 @@ public class Store extends SQLiteOpenHelper {
                     if (p != null) u = parseUrl(p.optString("url"));
                 } catch (UserException ignored) {
                 }
-                if (u == null || exists(db, u[1], u[2])) {
+                if (u == null || exists(db, u[3], u[1], u[2])) {
                     skipped++;
                     continue;
                 }
                 ContentValues v = new ContentValues();
+                v.put("site", u[3]);
                 v.put("url", u[0]);
                 v.put("product_id", Long.parseLong(u[1]));
                 v.put("sku_id", Long.parseLong(u[2]));
                 v.put("name", text(p, "name", 300));
                 String image = text(p, "image", 500);
-                v.put("image", image.startsWith("https://images.uzum.uz/") ? image : "");
+                v.put("image", Sites.imageOk(u[3], image) ? image : "");
                 v.put("seller", text(p, "seller", 200));
                 v.put("variant", text(p, "variant", 200));
                 for (String k : NUMBERS) copyLong(v, p, k);
@@ -417,9 +393,9 @@ public class Store extends SQLiteOpenHelper {
         return new int[]{added, skipped};
     }
 
-    private static boolean exists(SQLiteDatabase db, String productId, String skuId) {
-        try (Cursor c = db.rawQuery("SELECT id FROM products WHERE product_id=? AND sku_id=?",
-                new String[]{productId, skuId})) {
+    private static boolean exists(SQLiteDatabase db, String site, String productId, String skuId) {
+        try (Cursor c = db.rawQuery("SELECT id FROM products WHERE site=? AND product_id=? AND sku_id=?",
+                new String[]{site, productId, skuId})) {
             return c.moveToFirst();
         }
     }
