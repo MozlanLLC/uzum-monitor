@@ -212,8 +212,10 @@ function favScript(){
     if(part) who=JSON.parse(atob(part.replace(/-/g,'+').replace(/_/g,'/'))).customer_id?'in':'out'; }catch(e){}
   return JSON.stringify({items, empty, who});
 }
-// Избранное Ozon: страница /my/favorites. Список разбит на несколько блоков плиток и догружается при прокрутке;
-// ниже на той же странице идут рекомендации «Подобрали для вас» (блок island) — их не берём.
+// Избранное Ozon: страница /my/favorites. Сайт показывает список частями по мере прокрутки, а в свёрнутом окне
+// не показывает продолжение вовсе — поэтому берём список тем же запросом, которым его получает сама страница,
+// часть за частью. Рекомендации «Подобрали для вас» (отдельная лента recoms…) не берём.
+// Если запрос не сработал — читаем плитки, которые видны на странице.
 function favOzon(){
   const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
   if(document.readyState!=='complete'&&el<15) return null;
@@ -221,18 +223,35 @@ function favOzon(){
   const anon=!!document.querySelector('[data-widget="profileMenuAnonymous"]'), here=/^\/my\/favorites/.test(location.pathname);
   if(anon||!here){ if(el<6) return null; return JSON.stringify({items:[],who:'out'}); }
   const RE=/(\/product\/(?:[^\/?#]*-)?(\d+))\/?(?:[?#]|$)/;
+  if(!W.__fz){ const z=W.__fz={done:false,items:[],ok:false}; (async()=>{
+    try{
+      const get=u=>fetch('/api/entrypoint-api.bx/page/json/v2?url='+encodeURIComponent(u),{credentials:'include'}).then(r=>r.ok?r.json():null);
+      const state=(ws,k)=>{ try{ return JSON.parse(ws[k]); }catch(e){ return null; } };
+      const texts=(o,key,out)=>{ if(o&&typeof o==='object'){ for(const k of Object.keys(o)){ const v=o[k]; if(k===key&&v&&typeof v.text==='string') out.push(v.text); else texts(v,key,out); } } return out; };
+      const seen={}; let d=await get('/my/favorites'), next=null, pages=0;
+      while(d&&pages++<30){
+        const ws=d.widgetStates||{};
+        for(const k of Object.keys(ws)){ if(!/^tileGrid/.test(k)) continue; const v=state(ws,k);
+          for(const it of (v&&v.items)||[]){ const m=String((it.action&&it.action.link)||'').match(RE); if(!m||seen[m[2]]) continue; seen[m[2]]=1;
+            const names=[].concat(texts(it.mainState,'textDS',[]),texts(it.mainState,'textAtom',[])).sort((x,y)=>y.length-x.length);
+            let price=''; const pr=JSON.stringify(it.mainState||[]).match(/"priceV2":\{"price":\[\{"text":"([^"]+)"/); if(pr) price=pr[1].replace(/\\u00a0|\\u202f| | /g,' ').replace(/so[ʻ'’`]?m/i,'сум');
+            const im=it.tileImage&&it.tileImage.items&&it.tileImage.items[0]&&it.tileImage.items[0].image;
+            z.items.push({url:'https://www.ozon.uz'+m[1]+'/', title:names[0]||'', price:price||'нет в наличии', image:(im&&im.link)||''}); } }
+        if(pages===1){ next=null; for(const k of Object.keys(ws)){ if(!/^paginator/.test(k)) continue; const v=state(ws,k); if(v&&v.nextPage&&!/recom/i.test(v.layoutContainer||'')) next=v.nextPage; } }
+        else next=d.nextPage||null;
+        z.ok=true;
+        if(!next||!/^\/my\/favorites/.test(next)) break;
+        await new Promise(r=>setTimeout(r,250));
+        d=await get(next);
+      }
+    }catch(e){}
+    z.done=true; })(); }
+  if(!W.__fz.done&&el<32) return null;
+  if(W.__fz.ok&&W.__fz.items.length) return JSON.stringify({items:W.__fz.items, who:'in'});
   const mine=e=>!e.closest('[data-widget="island"]');
-  const grids=[...document.querySelectorAll('[data-widget^="tileGrid"]')].filter(mine);
-  let tiles=[]; grids.forEach(g=>tiles.push(...g.querySelectorAll('.tile-root')));
-  if(!tiles.length){   // другая вёрстка: плиткой считаем блок вокруг ссылок на один товар
-    const map={}; (grids.length?grids:[document]).forEach(g=>{ for(const a of g.querySelectorAll('a[href*="/product/"]')){ if(!mine(a)) continue; const m=(a.getAttribute('href')||'').match(RE); if(!m) continue; (map[m[2]]=map[m[2]]||[]).push(a); } });
-    tiles=Object.keys(map).map(id=>{ const links=map[id]; let box=links[0]; for(let i=0;i<6&&box.parentElement;i++){ if(box.parentElement.querySelectorAll('a[href*="/product/"]').length>links.length) break; box=box.parentElement; } return box; }); }
-  if(!tiles.length&&el<10) return null;
-  if(tiles.length){ tiles[tiles.length-1].scrollIntoView({block:'end'}); window.scrollBy(0,300);   // догружаем продолжение именно избранного
-    if(W.__n!==tiles.length){ W.__n=tiles.length; W.__s=0; if(el<30) return null; }
-    else if(++W.__s<4&&el<30) return null; }
+  const tiles=[]; [...document.querySelectorAll('[data-widget^="tileGrid"]')].filter(mine).forEach(g=>tiles.push(...g.querySelectorAll('.tile-root')));
   const seen={}, items=[];
-  for(const t of tiles){ const a=t.matches('a[href*="/product/"]')?t:t.querySelector('a[href*="/product/"]'); const m=a&&(a.getAttribute('href')||'').match(RE); if(!m||seen[m[2]]) continue; seen[m[2]]=1;
+  for(const t of tiles){ const a=t.querySelector('a[href*="/product/"]'); const m=a&&(a.getAttribute('href')||'').match(RE); if(!m||seen[m[2]]) continue; seen[m[2]]=1;
     const all=txt(t), pm=all.match(/\d[\d\s  ]*\s*(?:so[ʻ'’`]?m|сум)/i), img=t.querySelector('img');
     const title=[...t.querySelectorAll('a[href*="/product/"]')].map(txt).sort((x,y)=>y.length-x.length)[0]||(img&&img.getAttribute('alt'))||'';
     items.push({url:'https://www.ozon.uz'+m[1]+'/', title, price:pm?pm[0].replace(/so[ʻ'’`]?m/i,'сум'):(/нет в наличии/i.test(all)?'нет в наличии':''), image:img?(img.currentSrc||img.getAttribute('src')||'').split('?')[0]:''}); }
