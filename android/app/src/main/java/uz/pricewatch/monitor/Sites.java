@@ -41,7 +41,7 @@ public final class Sites {
 
     private static final Pattern UZUM_IMAGE = Pattern.compile("^https://images\\.uzum\\.uz/.*");
     private static final Pattern OZON_IMAGE = Pattern.compile("^https://(?:ir(?:-\\d+)?|cdn\\d*)\\.ozone\\.ru/.*");
-    private static final Pattern WB_IMAGE = Pattern.compile("^https://[a-z0-9-]+\\.(?:wbbasket\\.ru|wbcontent\\.net)/.*");
+    private static final Pattern WB_IMAGE = Pattern.compile("^https://[a-z0-9-]+\\.(?:wbbasket\\.ru|wbcontent\\.net|geobasket\\.net)/.*");
 
     public static String normalize(String site) {
         return OZON.equals(site) || WB.equals(site) ? site : UZUM;

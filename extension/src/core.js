@@ -39,7 +39,7 @@ const Core = (() => {
       },
     },
     wb: {
-      name: 'Wildberries', extract: 'extract-wb.js', image: /^https:\/\/[a-z0-9-]+\.(?:wbbasket\.ru|wbcontent\.net)\//,
+      name: 'Wildberries', extract: 'extract-wb.js', image: /^https:\/\/[a-z0-9-]+\.(?:wbbasket\.ru|wbcontent\.net|geobasket\.net)\//,
       path: /\/catalog\/(\d+)\/detail\.aspx(?:[?#].*)?$/,
       hint: 'wildberries.uz/catalog/123456/detail.aspx',
       clean(url, m) {

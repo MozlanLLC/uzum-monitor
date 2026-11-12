@@ -1,5 +1,5 @@
 {
-  "version": 12,
+  "version": 13,
   "files": ["ui.html", "extract.js", "extract-ozon.js", "extract-wb.js"],
-  "notes": "Товары с Ozon и Wildberries, выбор размера, вход в личные кабинеты"
+  "notes": "Товары с Ozon и Wildberries, избранное со всех трёх сайтов, фильтр по магазинам, выбор размера"
 }

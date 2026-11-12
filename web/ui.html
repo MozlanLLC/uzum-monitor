@@ -99,6 +99,9 @@ nav .badge{position:absolute;top:5px;left:50%;margin-left:6px;min-width:18px;hei
 a.item{color:var(--acc);text-decoration:none}
 .vlist{max-height:48vh;overflow-y:auto;margin:0 -4px;padding:0 4px}
 .sheet .primary:disabled{opacity:.5}
+.item .ok{color:var(--good,#0a7d3b)}
+.mut{color:var(--mute)}
+.item:disabled{opacity:.6}
 .var{font-size:13px;font-weight:600;margin-top:3px;overflow-wrap:anywhere}
 .tools{display:flex;gap:8px;margin-bottom:12px}
 .tools input,.tools select{height:40px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);padding:0 10px;font:inherit;font-size:14px;min-width:0}
@@ -169,17 +172,19 @@ const SORTS={new:'Сначала новые',changed:'Недавно менял�
 let sort=store.get('sort','new'), query='', targetEdit=false, sizePick=null; if(!SORTS[sort]) sort='new';
 const TITLES={products:'Товары',changes:'Изменения',favorites:'Избранное',settings:'Настройки'};
 let tab='products', filter='all', open={}, hist={}, onlyChanges={}, lastKey='', S=null;
-let fav=null, favMsg='', favSel={}, diag='', waiters={}, menuId=null, menuSure=false;
+let fav=null, favMsg='', favSel={}, favBusy=false, shop='all', diag='', waiters={}, menuId=null, menuSure=false;
 let seenTs=Number(store.get('seenTs',0));
 // Аккаунт Uzum: state 'in' — вход выполнен (приложение прочитало ваше избранное), '' — не выполнен или неизвестно
-let acct={state:''}, loginOpened=false, acctMenu=false, outBusy=false;
+let acct={uzum:'',ozon:'',wb:''}, loginOpened='', acctMenu=false, outBusy=false;
 const CANOUT=!!(window.Android&&typeof Android.logoutUzum==='function');
-try{ acct=Object.assign(acct,JSON.parse(store.get('acct','{}'))); }catch(e){}
+try{ const a=JSON.parse(store.get('acct','{}')); ['uzum','ozon','wb'].forEach(k=>{ if(a[k]==='in'||a[k]==='out') acct[k]=a[k]; }); if(a.state==='in') acct.uzum='in'; }catch(e){}
 
 window.onPageResult=(token,result)=>{ const w=waiters[token]; delete waiters[token]; if(w) w(result); };
 function runOnPage(url,fn,cb){ if(HAS('runFn')){ Android.runFn(url,fn,cb); return; }
   const t='t'+Date.now()+Math.random(); waiters[t]=cb; Android.runOnPage(url,'('+fn.toString()+')()',t); }
-function setAcct(state){ acct={state}; store.set('acct',JSON.stringify(acct)); }
+// Вход на сайте: 'in' — выполнен, 'out' — нет, '' — пока неизвестно (узнаём, когда читаем избранное)
+function setAcct(site,state){ acct[site]=state||''; store.set('acct',JSON.stringify(acct)); }
+const acctNote=site=>acct[site]==='in'?' · вход выполнен':acct[site]==='out'?' · вход не выполнен':'';
 // Выполняется на странице uzum.uz при выходе: стирает данные сайта, сохранённые в приложении
 function wipeScript(){
   const W=window; W.__t0=W.__t0||Date.now(); if((Date.now()-W.__t0)/1000<2) return null;
@@ -201,8 +206,67 @@ function favScript(){
     const url=new URL(a.getAttribute('href'),location.origin).href; if(seen[url]) continue; seen[url]=1;
     const img=c.querySelector('img');
     items.push({url, title:txt(c.querySelector('[data-test-id="product-card__title"]')), price:txt(c.querySelector('[data-test-id="product-card__actual-price"]')), image:img?(img.getAttribute('src')||''):''}); }
-  return JSON.stringify({items, empty});
+  // Вход виден по сохранённому сайтом ключу: у вошедшего в нём есть номер покупателя (сам ключ не читаем дальше)
+  let who='';
+  try{ const part=(localStorage.getItem('auth_sdk_access_token')||'').split('.')[1];
+    if(part) who=JSON.parse(atob(part.replace(/-/g,'+').replace(/_/g,'/'))).customer_id?'in':'out'; }catch(e){}
+  return JSON.stringify({items, empty, who});
 }
+// Избранное Ozon: страница /my/favorites, плитки товаров
+function favOzon(){
+  const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
+  if(document.readyState!=='complete'&&el<15) return null;
+  const txt=e=>e?(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim():'';
+  const anon=!!document.querySelector('[data-widget="profileMenuAnonymous"]'), here=/^\/my\/favorites/.test(location.pathname);
+  if(anon||!here){ if(el<6) return null; return JSON.stringify({items:[],who:anon||!here?'out':''}); }
+  const grid=document.querySelector('[data-widget^="tileGrid"]')||document;
+  const map={}, order=[];
+  for(const a of grid.querySelectorAll('a[href*="/product/"]')){ const m=(a.getAttribute('href')||'').match(/(\/product\/(?:[^\/?#]*-)?(\d+))\/?(?:[?#]|$)/); if(!m) continue;
+    if(!map[m[2]]){ map[m[2]]={path:m[1],links:[]}; order.push(m[2]); } map[m[2]].links.push(a); }
+  if(!order.length&&el<10) return null;
+  if(order.length){ window.scrollTo(0,document.documentElement.scrollHeight);
+    if(W.__n!==order.length){ W.__n=order.length; W.__s=0; if(el<28) return null; }
+    else if(++W.__s<3&&el<28) return null; }
+  const items=order.map(id=>{ const o=map[id]; let box=o.links[0].closest('.tile-root');
+    if(!box){ box=o.links[0]; for(let i=0;i<6&&box.parentElement;i++){ if(box.parentElement.querySelectorAll('a[href*="/product/"]').length>o.links.length) break; box=box.parentElement; } }
+    const pm=txt(box).match(/\d[\d\s\u00a0\u202f]*\s*(?:so[ʻ'’`]?m|сум)/i), img=box.querySelector('img');
+    return {url:'https://www.ozon.uz'+o.path+'/', title:o.links.map(txt).sort((a,b)=>b.length-a.length)[0]||'', price:pm?pm[0].replace(/so[ʻ'’`]?m/i,'сум'):'', image:img?(img.currentSrc||img.getAttribute('src')||'').split('?')[0]:''}; });
+  return JSON.stringify({items, who:'in'});
+}
+// Избранное Wildberries: страница /lk/favorites
+function favWb(){
+  const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
+  if(document.readyState!=='complete'&&el<15) return null;
+  const txt=e=>e?(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim():'';
+  const here=/^\/lk\/favorites/.test(location.pathname), loginLink=!!document.querySelector('a[href*="/security/login"]')||/\/security\/login/.test(location.pathname);
+  if(el<5) return null;
+  if(!here||loginLink) return JSON.stringify({items:[],who:'out'});
+  let known=false; try{ known=Object.keys(localStorage).some(k=>k.indexOf('user-info-')===0); }catch(e){}
+  const map={}, order=[];
+  for(const a of document.querySelectorAll('a[href*="/catalog/"][href*="detail.aspx"]')){ const h=a.getAttribute('href')||'', m=h.match(/\/catalog\/(\d+)\/detail\.aspx/); if(!m) continue;
+    const size=(h.match(/[?&]size=(\d+)/)||[])[1]||'';
+    if(!map[m[1]]){ map[m[1]]={size,links:[]}; order.push(m[1]); } map[m[1]].links.push(a); }
+  if(!order.length&&el<12) return null;
+  if(order.length){ window.scrollTo(0,document.documentElement.scrollHeight);
+    if(W.__n!==order.length){ W.__n=order.length; W.__s=0; if(el<28) return null; }
+    else if(++W.__s<3&&el<28) return null; }
+  const items=order.map(nm=>{ const o=map[nm]; let box=o.links[0];
+    for(let i=0;i<7&&box.parentElement;i++){ if(box.parentElement.querySelectorAll('a[href*="detail.aspx"]').length>o.links.length) break; box=box.parentElement; }
+    const img=box.querySelector('img');
+    return {url:'https://www.wildberries.uz/catalog/'+nm+'/detail.aspx'+(o.size?'?size='+o.size:''), title:o.links.map(a=>a.getAttribute('aria-label')||txt(a)).sort((a,b)=>b.length-a.length)[0]||(img&&img.getAttribute('alt'))||'',
+      price:txt(box.querySelector('ins')), image:img?(img.currentSrc||img.getAttribute('src')||'').split('?')[0]:''}; });
+  return JSON.stringify({items, who:known||here?'in':''});
+}
+const FAV={uzum:{url:'https://uzum.uz/ru/wishes',fn:favScript},ozon:{url:'https://www.ozon.uz/my/favorites',fn:favOzon},wb:{url:'https://www.wildberries.uz/lk/favorites',fn:favWb}};
+const favSites=()=>MULTI?['uzum','ozon','wb']:['uzum'];
+// Ключ товара по ссылке из избранного — чтобы отметить те, что уже отслеживаются
+const favKey=f=>{ const u=f.url; let m;
+  if(f.site==='ozon'){ m=u.match(/\/product\/(?:[^\/?#]*-)?(\d+)\/?(?:[?#]|$)/); return m?'ozon:'+m[1]+':0':u; }
+  if(f.site==='wb'){ m=u.match(/\/catalog\/(\d+)\/detail/); const z=u.match(/[?&]size=(\d+)/); return m?'wb:'+m[1]+':'+(z?z[1]:'0'):u; }
+  return pkey(u); };
+const shopChips=(counts,total)=>{ const used=Object.keys(SITE_NAMES).filter(k=>counts[k]); if(used.length<2) return '';
+  return '<div class="chips">'+[['all','Все магазины · '+total]].concat(used.map(k=>[k,SITE_NAMES[k]+' · '+counts[k]])).map(x=>`<button type="button" class="chip ${shop===x[0]?'on':''}" data-shop="${x[0]}">${x[1]}</button>`).join('')+'</div>'; };
+const countBy=list=>{ const c={}; list.forEach(x=>{ const k=SITE_NAMES[x.site]?x.site:'uzum'; c[k]=(c[k]||0)+1; }); return c; };
 function diagScript(){
   const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
   const pe=document.querySelector('[data-test-id="text__product-price"]');
@@ -312,10 +376,12 @@ function events(){
 }
 function viewProducts(){
   const ps=S.products, n=ps.length;
-  const list=sorted((filter==='cheaper'?ps.filter(cheaper):filter==='in'?ps.filter(inStock):filter==='out'?ps.filter(outOf):ps).filter(matches));
+  const shops=countBy(ps); if(shop!=='all'&&!shops[shop]) shop='all';
+  const list=sorted((filter==='cheaper'?ps.filter(cheaper):filter==='in'?ps.filter(inStock):filter==='out'?ps.filter(outOf):ps).filter(p=>shop==='all'||siteOf(p)===shop).filter(matches));
   if(!n) return newVer()+'<div class="empty">Пока ничего не отслеживается.<br><br>Нажмите «+», чтобы добавить товар по ссылке, или выберите товары во вкладке «Избранное».</div>';
   return `${newVer()}<div class="status"><span>${S.busy?'Идёт проверка…':'Следующая проверка в '+hm(S.next_run)}</span><button class="ghost" type="button" id="all" ${S.busy?'disabled':''}>Проверить все</button></div>
   <div class="chips"><button type="button" class="chip ${filter==='all'?'on':''}" data-filter="all">Все · ${n}</button><button type="button" class="chip ${filter==='in'?'on':''}" data-filter="in">В наличии · ${ps.filter(inStock).length}</button><button type="button" class="chip ${filter==='cheaper'?'on':''}" data-filter="cheaper">Подешевели · ${ps.filter(cheaper).length}</button><button type="button" class="chip ${filter==='out'?'on':''}" data-filter="out">Нет в наличии · ${ps.filter(outOf).length}</button></div>
+  ${shopChips(shops,n)}
   <div class="tools"><input id="q" type="search" placeholder="Поиск по названию" aria-label="Поиск по названию" autocomplete="off" value="${esc(query)}">
   <select id="sort" aria-label="Порядок товаров">${Object.keys(SORTS).map(k=>`<option value="${k}" ${k===sort?'selected':''}>${SORTS[k]}</option>`).join('')}</select></div>
   ${list.map(card).join('')||`<div class="empty">${query.trim()?'Ничего не найдено.':'В этом фильтре пока пусто.'}</div>`}`;
@@ -326,21 +392,24 @@ function viewChanges(){
   return '<div class="card">'+ev.map(e=>`<div class="feed">${e.p.image?`<img src="${esc(e.p.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<div class="ft"><b>${esc(e.p.name)}</b>${esc(e.text)}<br><small>${dt(e.ts)}</small></div></div>`).join('')+'</div>';
 }
 function viewFavorites(){
-  if(!CAN) return `<div class="card"><p class="note">Избранное Uzum доступно в новой версии приложения.</p><a href="${APK}"><button class="ghost" type="button">Скачать новую версию</button></a></div>`;
+  if(!CAN) return `<div class="card"><p class="note">Избранное доступно в новой версии приложения.</p><a href="${APK}"><button class="ghost" type="button">Скачать новую версию</button></a></div>`;
   const have={}; S.products.forEach(p=>have[pid(p)]=1);
-  let body='';
-  if(fav==='loading') body='<div class="empty">Читаю избранное…</div>';
-  let pick='';
-  if(fav&&fav!=='loading'&&fav.length){ const n=Object.keys(favSel).filter(k=>favSel[k]).length;
-    const free=fav.filter(f=>!have[pkey(f.url)]).length;
-    if(free) pick=`<button class="ghost" type="button" id="favall">${n>=free?'Снять выбор':'Выбрать все'}</button>`;
-    body='<div class="card">'+fav.map((f,i)=>{ const got=have[pkey(f.url)];
-      return `<label class="feed">${f.image?`<img src="${esc(f.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<span class="ft"><b>${esc(f.title||f.url)}</b><small>${got?'уже отслеживается':esc(f.price)}</small></span><input type="checkbox" data-f="${i}" ${got?'disabled checked':(favSel[i]?'checked':'')}></label>`; }).join('')+'</div>'
-      +`<div class="bar"><button class="primary" type="button" id="favadd" ${n?'':'disabled'}>Применить${n?' · '+n:''}</button></div>`; }
-  return `<p class="note">Товары из вашего избранного на Uzum. Отметьте те, за которыми нужно следить, и нажмите «Применить». Цвет или размер здесь не выбирается: чтобы следить за конкретным вариантом, добавьте ссылку на него через «+» или «Поделиться».</p>
-  <div class="acts" style="margin:0 0 12px"><button class="ghost" type="button" id="favload">${fav&&fav!=='loading'?'Обновить список':'Показать избранное'}</button>${pick}</div>
-  ${favMsg?`<p class="note">${esc(favMsg)}</p>`:''}${body}`;
+  let body='', pick='', chips='';
+  if(favBusy&&!(fav&&fav.length)) body='<div class="empty">Читаю избранное…</div>';
+  if(fav&&fav.length){
+    const shops=countBy(fav); if(shop!=='all'&&!shops[shop]) shop='all';
+    const list=fav.filter(f=>shop==='all'||f.site===shop);
+    const free=list.filter(f=>!have[favKey(f)]), n=free.filter(f=>favSel[f.url]).length, total=fav.filter(f=>favSel[f.url]&&!have[favKey(f)]).length;
+    chips=shopChips(shops,fav.length);
+    if(free.length) pick=`<button class="ghost" type="button" id="favall">${n>=free.length?'Снять выбор':'Выбрать все'}</button>`;
+    body='<div class="card">'+list.map(f=>{ const got=have[favKey(f)];
+      return `<label class="feed">${/^https:\/\//.test(f.image||'')?`<img src="${esc(f.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<span class="ft"><b>${esc(f.title||f.url)}</b><small>${[SITE_NAMES[f.site],got?'уже отслеживается':esc(f.price)].filter(Boolean).join(' · ')}</small></span><input type="checkbox" data-fav="${esc(f.url)}" ${got?'disabled checked':(favSel[f.url]?'checked':'')}></label>`; }).join('')+'</div>'
+      +`<div class="bar"><button class="primary" type="button" id="favadd" ${total?'':'disabled'}>Применить${total?' · '+total:''}</button></div>`; }
+  return `<p class="note">Товары из вашего избранного${MULTI?' на Uzum, Ozon и Wildberries':' на Uzum'}. Отметьте те, за которыми нужно следить, и нажмите «Применить». Цвет здесь не выбирается: чтобы следить за конкретным вариантом, добавьте ссылку на него через «+».</p>
+  <div class="acts" style="margin:0 0 12px"><button class="ghost" type="button" id="favload" ${favBusy?'disabled':''}>${favBusy?'Читаю…':fav?'Обновить список':'Показать избранное'}</button>${pick}</div>
+  ${chips}${favMsg?`<p class="note">${esc(favMsg)}</p>`:''}${body}`;
 }
+
 function viewSettings(){
   const i=S.info||{};
   const row=(title,sub,ok,key,btn)=>`<div class="setrow"><div>${title}<small>${sub}</small></div>${ok?'<span class="ok">включено</span>':`<button class="ghost" type="button" data-s="${key}">${btn}</button>`}</div>`;
@@ -356,7 +425,7 @@ function viewSettings(){
   <div class="card"><h2>Уведомления</h2>
   <div class="setrow"><div>Сообщать об изменении количества<small>Если выключить — только цена и наличие</small></div><input type="checkbox" id="ns" aria-label="Сообщать об изменении количества" ${i.notify_stock?'checked':''}></div></div>
   <div class="card"><h2>${EXT?'Сайты':'Личные кабинеты'}</h2><p class="note">${EXT?'Расширение пользуется вашим входом на сайтах в этом браузере. Войдите на Uzum, Ozon или Wildberries — и монитор увидит ваши личные цены.':'После входа монитор видит ваши личные цены'+(MULTI?' на Uzum, Ozon и Wildberries':'')+' и избранное Uzum. Номер и код вы вводите на самом сайте — приложение их не видит.'}</p>
-  ${acct.state==='in'?'<p class="note"><span class="ok">Uzum: вход выполнен</span></p>':''}
+  ${favSites().some(k=>acct[k])?`<p class="note">${favSites().filter(k=>acct[k]).map(k=>`<span class="${acct[k]==='in'?'ok':'mut'}">${SITE_NAMES[k]}${acctNote(k)}</span>`).join('<br>')}</p>`:''}
   <div class="acts"><button class="ghost" type="button" id="login2">${EXT?'Открыть сайт':'Войти или выйти'}</button>${CAN&&S.products.some(p=>siteOf(p)==='uzum')?'<button class="ghost" type="button" id="diagb">Диагностика</button>':''}</div>
   ${diag?`<textarea readonly aria-label="Данные диагностики">${esc(diag)}</textarea><div class="acts"><button class="ghost" type="button" id="diagcopy">Скопировать</button><button class="ghost" type="button" id="diagclose">Закрыть</button></div>`:''}</div>
   <div class="card"><h2>Резервная копия</h2><p class="note">Список товаров и история цен сохраняются в файл. Пригодится при переустановке или переносе на другое устройство. Файл подходит и приложению для Android, и расширению для браузера.</p>
@@ -369,7 +438,7 @@ function refresh(force){
   for(const p of s.products){ p.pending=s.pending.indexOf(p.id)>=0; if(!hist[p.id]||hist[p.id].checks.length!==p.checks_count) loadHist(p.id); }
   const fresh=events().filter(e=>e.ts>seenTs).length;
   if(tab==='changes'&&fresh){ seenTs=Math.floor(Date.now()/1000); store.set('seenTs',seenTs); }
-  const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,diag,fresh,acct.state,query,sort]);
+  const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,favBusy,shop,diag,fresh,acct,query,sort]);
   if(key===lastKey&&!force) return; lastKey=key;
   $('#title').textContent=TITLES[tab];
   $('#login').classList.add('in'); $('#logintext').textContent=EXT?'Сайты':'Аккаунты';
@@ -382,29 +451,39 @@ function refresh(force){
 }
 window.refresh=refresh;
 // После возврата с экрана входа заново читаем избранное: по нему видно, выполнен ли вход
-window.onAppResume=()=>{ if(loginOpened){ loginOpened=false; if(CAN) loadFav(); } refresh(true); };
+window.onAppResume=()=>{ if(loginOpened){ const site=loginOpened; loginOpened=''; if(CAN&&FAV[site]) loadFav(site); } refresh(true); };
 function login(site){ site=site||'uzum'; const url=LOGIN[site];
-  if(EXT) go(url); else if(CAN){ loginOpened=site==='uzum'; Android.openUzum(url); } else location.href=APK; }
-function loadFav(){ fav='loading'; favMsg=''; favSel={}; refresh(true);
-  runOnPage(WISHES,favScript,r=>{ let d=null; try{ d=r&&JSON.parse(r); }catch(e){}
-    if(d) setAcct(d.items.length?'in':'');
-    if(!d){ fav=null; favMsg='Не удалось открыть избранное. Проверьте интернет и попробуйте ещё раз.'; }
-    else if(!d.items.length){ fav=null; favMsg='Избранное пусто. Если товары там есть — сначала войдите в Uzum (кнопка вверху).'; }
-    else { fav=d.items; }
-    refresh(true); }); }
+  if(EXT) go(url); else if(CAN){ loginOpened=site; Android.openUzum(url); } else location.href=APK; }
+function loadFav(only,done){ if(favBusy) return; favBusy=true; favMsg='';
+  const sites=only?[only]:favSites(), notes=[];
+  if(!only){ fav=null; favSel={}; } else if(fav) fav=fav.filter(f=>f.site!==only);
+  refresh(true);
+  const step=i=>{ if(i>=sites.length){ favBusy=false; if(!fav||!fav.length) fav=null; favMsg=notes.join(' '); refresh(true); if(done) done(); return; }
+    const site=sites[i];
+    runOnPage(FAV[site].url,FAV[site].fn,r=>{ let d=null; try{ d=r&&JSON.parse(r); }catch(e){}
+      const name=SITE_NAMES[site];
+      if(!d) notes.push(name+': не удалось открыть избранное.');
+      else { let who=d.who||''; if(site==='uzum'&&!who&&d.items.length) who='in';
+        setAcct(site,who);
+        if(who==='out') notes.push(name+': вход не выполнен.');
+        else if(!d.items.length) notes.push(name+': избранное пусто'+(who==='in'?'.':' или вход не выполнен.'));
+        fav=(fav||[]).concat(d.items.map(x=>({site,url:x.url,title:x.title,price:x.price,image:x.image}))); }
+      refresh(true); step(i+1); }); };
+  step(0); }
 function openAcct(){ acctMenu=true; menuId=null;
-  const item=(site,extra)=>site==='uzum'||MULTI?`<button class="item" type="button" data-act="acc-${site}">${SITE_NAMES[site]}${extra||''}</button>`:'';
-  $('#menubody').innerHTML=`<h2>${EXT?'Открыть сайт':'Личные кабинеты'}</h2>
-  <p class="note">${EXT?'Расширение видит цены так же, как вы в этом браузере. Войдите на нужном сайте — и цены станут личными.':'Выберите сайт и войдите в свой кабинет — монитор будет видеть ваши личные цены. Номер и код вы вводите на самом сайте, приложение их не видит.'}</p>
-  ${item('uzum',acct.state==='in'&&!EXT?' · вход выполнен':'')}${item('ozon')}${item('wb')}
+  const item=site=>site==='uzum'||MULTI?`<button class="item" type="button" data-act="acc-${site}">${SITE_NAMES[site]}<span class="${acct[site]==='in'?'ok':'mut'}">${acctNote(site)}</span></button>`:'';
+  $('#menubody').innerHTML=`<h2>${EXT?'Сайты':'Личные кабинеты'}</h2>
+  <p class="note">${EXT?'Расширение видит цены так же, как вы в этом браузере. Нажмите на сайт, чтобы открыть его и войти, — цены станут личными.':'Нажмите на сайт и войдите в свой кабинет — монитор будет видеть ваши личные цены и избранное. Номер и код вы вводите на самом сайте, приложение их не видит.'}</p>
+  ${item('uzum')}${item('ozon')}${item('wb')}
   ${!MULTI&&!EXT?`<a class="item" href="${APK}">Ozon и Wildberries — в новой версии приложения</a>`:''}
+  <button class="item" type="button" data-act="acc-check" ${favBusy?'disabled':''}>${favBusy?'Проверяю вход…':'Проверить вход'}</button>
   ${!EXT&&CANOUT?'<button class="item danger" type="button" data-act="logout">Выйти из всех кабинетов</button>':''}`;
   $('#menu').hidden=false; }
 // Выход: стираем сохранённые данные каждого сайта, затем cookie
 function logout(){ if(!CANOUT||outBusy) return; outBusy=true;
   const sites=MULTI?['uzum','ozon','wb']:['uzum'];
   const step=i=>{ if(i<sites.length){ runOnPage(LOGIN[sites[i]],wipeScript,()=>step(i+1)); return; }
-    Android.logoutUzum(); outBusy=false; setAcct(''); fav=null; favSel={}; favMsg='Вы вышли из личных кабинетов.'; refresh(true); };
+    Android.logoutUzum(); outBusy=false; ['uzum','ozon','wb'].forEach(k=>setAcct(k,'out')); fav=null; favSel={}; favMsg='Вы вышли из личных кабинетов.'; refresh(true); };
   step(0); }
 function openMenu(id){ acctMenu=false; targetEdit=false; sizePick=null; menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
 function drawTarget(p){
@@ -444,7 +523,8 @@ $('#addclose').addEventListener('click',()=>{ $('#addsheet').hidden=true; });
 $('#addsheet').addEventListener('click',e=>{ if(e.target.id==='addsheet') $('#addsheet').hidden=true; });
 $('#menu').addEventListener('click',e=>{ if(e.target.id==='menu'){ $('#menu').hidden=true; return; }
   const b=e.target.closest('button'); if(!b) return; const a=b.dataset.act;
-  if(acctMenu){ $('#menu').hidden=true; if(a&&a.indexOf('acc-')===0) login(a.slice(4)); if(a==='logout') logout(); return; }
+  if(acctMenu){ if(a==='acc-check'){ loadFav(null,()=>{ if(acctMenu&&!$('#menu').hidden) openAcct(); }); openAcct(); return; }
+    $('#menu').hidden=true; acctMenu=false; if(a&&a.indexOf('acc-')===0) login(a.slice(4)); if(a==='logout') logout(); return; }
   const p=S.products.find(x=>x.id===menuId); if(!p) return;
   if(a==='del'&&!menuSure){ menuSure=true; drawMenu(); return; }
   if(a==='target'){ targetEdit=true; drawMenu(); return; }
@@ -474,10 +554,11 @@ $('#view').addEventListener('click',e=>{
     if(b.id==='all'){ call('check',0); setTimeout(()=>refresh(true),300); }
     if(b.dataset.filter){ filter=b.dataset.filter; refresh(true); }
     if(b.id==='favload') loadFav();
+    if(b.dataset.shop){ shop=b.dataset.shop; refresh(true); }
     if(b.id==='favall'){ const have={}; S.products.forEach(p=>have[pid(p)]=1);
-      const free=fav.map((f,i)=>have[pkey(f.url)]?-1:i).filter(i=>i>=0), all=free.every(i=>favSel[i]);
-      favSel={}; if(!all) free.forEach(i=>favSel[i]=true); refresh(true); }
-    if(b.id==='favadd'){ let n=0; Object.keys(favSel).forEach(i=>{ if(favSel[i]&&fav[i]){ const r=call('addProduct',fav[i].url); if(r&&!r.error) n++; } });
+      const free=fav.filter(f=>(shop==='all'||f.site===shop)&&!have[favKey(f)]), all=free.every(f=>favSel[f.url]);
+      free.forEach(f=>favSel[f.url]=!all); refresh(true); }
+    if(b.id==='favadd'){ let n=0; fav.forEach(f=>{ if(favSel[f.url]){ const r=call('addProduct',f.url); if(r&&!r.error) n++; } });
       favSel={}; favMsg=n?`Добавлено товаров: ${n}. Идёт первая проверка — смотрите вкладку «Товары».`:''; refresh(true); }
     if(b.dataset.s) call('openSettings',b.dataset.s);
     if(b.id==='login2') openAcct();
@@ -496,7 +577,7 @@ $('#view').addEventListener('click',e=>{
   const o=e.target.closest('[data-open]'); if(o){ const id=o.dataset.open; open[id]=!open[id]; refresh(true); } });
 $('#view').addEventListener('change',e=>{ const t=e.target;
   if(t.dataset.only){ onlyChanges[t.dataset.only]=t.checked; refresh(true); }
-  if(t.dataset.f){ favSel[t.dataset.f]=t.checked; refresh(true); }
+  if(t.dataset.fav){ favSel[t.dataset.fav]=t.checked; refresh(true); }
   if(t.id==='tabmode'){ call('setPref','tab_mode',t.checked?'1':'0'); refresh(true); }
   if(t.id==='sort'){ sort=t.value; store.set('sort',sort); refresh(true); }
   if(t.id==='ns'){ call('setPref','notify_stock',t.checked?'1':'0'); refresh(true); } });
