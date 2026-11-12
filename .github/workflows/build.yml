@@ -70,16 +70,11 @@ jobs:
           node extension/test.mjs
           node extension/build.mjs "1.0.${{ github.run_number }}"
           (cd extension/dist && zip -q -r ../../uzum-monitor-extension.zip .)
-          # тот же код без поля key — для загрузки в магазин расширений
-          node extension/build.mjs "1.0.${{ github.run_number }}" --store
-          (cd extension/dist && zip -q -r ../../uzum-monitor-extension-store.zip .)
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: uzum-monitor-extension
-          path: |
-            uzum-monitor-extension.zip
-            uzum-monitor-extension-store.zip
+          path: uzum-monitor-extension.zip
           if-no-files-found: error
 
   release:
@@ -101,7 +96,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "v1.0.${{ github.run_number }}" uzum-monitor.apk uzum-monitor-extension.zip uzum-monitor-extension-store.zip \
+          gh release create "v1.0.${{ github.run_number }}" uzum-monitor.apk uzum-monitor-extension.zip \
             --target "${{ github.sha }}" \
             --title "Uzum Монитор 1.0.${{ github.run_number }}" \
             --notes "Android: uzum-monitor.apk. Расширение для браузера: uzum-monitor-extension.zip (установка описана в README)." \
