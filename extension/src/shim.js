@@ -22,6 +22,7 @@
   L.get(null).then(all => {
     for (const k in all) put(k, all[k]);
     redraw(true);
+    send({ t: 'seen' });   // окно открыли — изменения увидены, счётчик на значке сбрасываем
     const go = /[?&]go=(\w+)/.exec(location.search);
     const b = go && document.querySelector('[data-tab="' + go[1] + '"]');
     if (b) b.click();
@@ -185,6 +186,12 @@
     },
     exportData,
     importData,
+    testNotify() {
+      send({ t: 'testnotify' }).then(r => {
+        if (!r || r.error || r.level === 'denied') toast('Браузер не смог показать уведомление' + (r && r.error ? ': ' + r.error : '') + '. Проверьте, что уведомления для него разрешены в системе.');
+        else toast('Уведомление отправлено. Если вы его не увидели — оно скрыто настройками системы, см. подсказку выше.');
+      });
+    },
   };
 
   // Ссылки открываем в новой вкладке браузера, а не внутри окна расширения.
