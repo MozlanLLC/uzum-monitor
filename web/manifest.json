@@ -1,5 +1,5 @@
 {
-  "version": 11,
-  "files": ["ui.html", "extract.js"],
-  "notes": "Поиск и сортировка товаров, желаемая цена, резервная копия, вариант товара на карточке"
+  "version": 15,
+  "files": ["ui.html", "extract.js", "extract-ozon.js", "extract-wb.js"],
+  "notes": "Товары с Ozon и Wildberries, избранное со всех трёх сайтов, фильтр по магазинам, выбор размера"
 }

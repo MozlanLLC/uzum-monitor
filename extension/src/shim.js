@@ -74,7 +74,7 @@
     let target = null, result = null;
     const port = chrome.runtime.connect({ name: 'tmp' });
     try {
-      if (!/^https:\/\/(www\.)?uzum\.uz\//.test(url)) throw new Error('not uzum');
+      if (!Core.allowedUrl(url)) throw new Error('unknown site');
       target = await openHidden(url);
       port.postMessage(target);
       const deadline = Date.now() + 35000;
@@ -99,7 +99,7 @@
     const data = Core.exportData(Object.values(cache.p), cache.c);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
-    a.download = 'uzum-monitor-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.download = 'monitor-tsen-' + new Date().toISOString().slice(0, 10) + '.json';
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
@@ -173,6 +173,7 @@
     openSettings() {},
     openUrl(url) { if (/^https:\/\//.test(url)) chrome.tabs.create({ url }); },
     openUzum(url) { this.openUrl(url); },
+    sites() { return Object.keys(Core.SITES).join(','); },
     openTab() { chrome.tabs.create({ url: chrome.runtime.getURL('ui.html?tab=1') }); },
     copy(textValue) { navigator.clipboard.writeText(textValue).catch(() => {}); },
     runOnPage() {},   // в расширении вместо строки со скриптом передаётся сама функция: см. runFn

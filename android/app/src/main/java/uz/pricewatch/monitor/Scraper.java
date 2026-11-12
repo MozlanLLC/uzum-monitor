@@ -11,16 +11,16 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Открывает карточку товара в невидимом WebView (настоящий браузер телефона) и читает её
- * скриптом extract.js. Все методы вызываются из главного потока.
+ * скриптом сайта из web/ (extract.js, extract-ozon.js, extract-wb.js). Все методы вызываются из главного потока.
  */
 public class Scraper {
 
@@ -31,10 +31,7 @@ public class Scraper {
 
     private static final long TIMEOUT_MS = 45000;
     private static final long POLL_MS = 800;
-    private static final Pattern HREF_SKU = Pattern.compile("[?&]skuId=(\\d+)");
-
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final String js;
     private WebView web;
     private int generation = 0;
 
@@ -46,8 +43,7 @@ public class Scraper {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    public Scraper(Context ctx, String extractJs) {
-        js = extractJs;
+    public Scraper(Context ctx) {
         web = new WebView(ctx.getApplicationContext());
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -77,7 +73,14 @@ public class Scraper {
         }
     }
 
-    public void fetch(final String url, final long productId, final long skuId, final Callback cb) {
+    /**
+     * @param site      сайт товара (см. Sites)
+     * @param extractJs скрипт чтения карточки этого сайта из web/
+     */
+    public void fetch(final String site, final String url, final long productId, final long skuId,
+                      final String extractJs, final Callback cb) {
+        // нужный размер (Wildberries) скрипт чтения берёт из window.__pmSku
+        final String js = "window.__pmSku=" + skuId + ";" + extractJs;
         final int my = ++generation;
         final long deadline = SystemClock.elapsedRealtime() + TIMEOUT_MS;
         final Run run = new Run();
@@ -92,7 +95,7 @@ public class Scraper {
                     public void onReceiveValue(String value) {
                         if (my != generation) return;
                         JSONObject d = parse(value);
-                        if (d != null && pageProductId(d.optString("href")) == productId) {
+                        if (d != null && Sites.pageProductId(site, d.optString("href")) == productId) {
                             run.last = d;
                             if (d.optBoolean("notFound") && "complete".equals(d.optString("ready"))) {
                                 if (++run.notFound >= 4) {
@@ -107,7 +110,7 @@ public class Scraper {
                                         + "|" + d.optString("retailerId") + "|" + d.optLong("cardPrice", 0);
                                 if (verdict && key.equals(run.prevKey)) {
                                     if (++run.stable >= 3) {
-                                        finish(d, productId, skuId, cb);
+                                        finish(d, site, productId, skuId, cb);
                                         return;
                                     }
                                 } else {
@@ -117,7 +120,7 @@ public class Scraper {
                             }
                         }
                         if (SystemClock.elapsedRealtime() > deadline) {
-                            timeout(run.last, d, productId, skuId, cb);
+                            timeout(run.last, d, site, productId, skuId, cb);
                             return;
                         }
                         handler.postDelayed(self, POLL_MS);
@@ -138,20 +141,11 @@ public class Scraper {
         return null;
     }
 
-    private static long pageProductId(String href) {
-        Matcher m = Store.PRODUCT_PATH.matcher(href == null ? "" : href);
-        try {
-            return m.find() ? Long.parseLong(m.group(1)) : -1;
-        } catch (NumberFormatException e) {
-            return -1;
-        }
-    }
-
-    private void timeout(JSONObject last, JSONObject any, long productId, long skuId, Callback cb) {
+    private void timeout(JSONObject last, JSONObject any, String site, long productId, long skuId, Callback cb) {
         if (last == null || last.optString("name").isEmpty()) {
             if (any != null && any.optBoolean("blocked")) {
                 cb.done("error", null, "Сайт показал проверку «вы не робот». Откройте товар в браузере телефона и попробуйте позже.");
-            } else if (any != null && pageProductId(any.optString("href")) != productId
+            } else if (any != null && Sites.pageProductId(site, any.optString("href")) != productId
                     && any.optString("href").startsWith("http")) {
                 cb.done("error", null, "Сайт открыл другую страницу вместо товара.");
             } else {
@@ -163,7 +157,25 @@ public class Scraper {
             cb.done("error", null, "Не удалось прочитать цену на странице.");
             return;
         }
-        finish(last, productId, skuId, cb);   // название есть, цены и кнопки «В корзину» нет — товара нет в наличии
+        finish(last, site, productId, skuId, cb);   // название есть, цены и кнопки «В корзину» нет — товара нет в наличии
+    }
+
+    /** Размеры (Wildberries): из них пользователь выбирает, за каким следить. */
+    private static JSONArray sizes(JSONArray in) throws JSONException {
+        JSONArray out = new JSONArray();
+        for (int i = 0; in != null && i < in.length() && i < 60; i++) {
+            JSONObject x = in.optJSONObject(i);
+            if (x == null || x.optLong("id", 0) <= 0) continue;
+            JSONObject o = new JSONObject();
+            o.put("id", x.optLong("id"));
+            String name = x.isNull("name") ? "" : x.optString("name");
+            o.put("name", name.length() > 40 ? name.substring(0, 40) : name);
+            long price = x.optLong("price", 0);
+            o.put("price", price > 0 ? price : JSONObject.NULL);
+            o.put("qty", Math.max(0, x.optLong("qty", 0)));
+            out.put(o);
+        }
+        return out;
     }
 
     private static String norm(String s) {
@@ -171,7 +183,7 @@ public class Scraper {
     }
 
     /** Перекрёстные проверки: это точно тот товар? */
-    private void finish(JSONObject d, long productId, long skuId, Callback cb) {
+    private void finish(JSONObject d, String site, long productId, long skuId, Callback cb) {
         try {
             String retailer = d.optString("retailerId");
             if (retailer.matches("\\d+") && Long.parseLong(retailer) != productId) {
@@ -186,18 +198,19 @@ public class Scraper {
                 cb.done("error", null, "Название на странице не совпало со служебным заголовком — данные не записаны.");
                 return;
             }
-            String warning = "";
-            if (skuId > 0) {
-                Matcher m = HREF_SKU.matcher(d.optString("href"));
-                if (m.find() && Long.parseLong(m.group(1)) != skuId) {
-                    warning = "Сайт переключил вариант товара (skuId " + m.group(1) + " вместо " + skuId + ").";
+            String warning = d.optString("warning");
+            if (warning.length() > 200) warning = warning.substring(0, 200);
+            if (Sites.UZUM.equals(Sites.normalize(site)) && skuId > 0) {
+                long shown = Sites.pageSku(d.optString("href"));
+                if (shown > 0 && shown != skuId) {
+                    warning = "Сайт переключил вариант товара (skuId " + shown + " вместо " + skuId + ").";
                 }
             }
             long price = d.optLong("price", 0);
             boolean inStock = price > 0 && d.optBoolean("canBuy") && !d.optBoolean("soldOutText");
             String image = d.optString("image");
-            if (!image.startsWith("https://images.uzum.uz/")) image = d.optString("ogImage");
-            if (!image.startsWith("https://images.uzum.uz/")) image = "";
+            if (!Sites.imageOk(site, image)) image = d.optString("ogImage");
+            if (!Sites.imageOk(site, image)) image = "";
 
             JSONObject res = new JSONObject();
             res.put("name", name);
@@ -213,6 +226,7 @@ public class Scraper {
             res.put("seller", d.optString("seller"));
             res.put("variant", d.optString("variant"));
             res.put("warning", warning);
+            res.put("sizes", sizes(d.optJSONArray("sizes")));
             cb.done("ok", res, null);
         } catch (Exception e) {
             cb.done("error", null, "Не удалось разобрать данные страницы: " + e.getMessage());

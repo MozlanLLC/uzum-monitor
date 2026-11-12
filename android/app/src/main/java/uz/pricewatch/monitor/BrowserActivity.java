@@ -3,7 +3,6 @@ package uz.pricewatch.monitor;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -18,7 +17,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * Обычный экран с сайтом Uzum: здесь пользователь сам входит в свой аккаунт.
+ * Обычный экран с сайтом (Uzum, Ozon, Wildberries): здесь пользователь сам входит в свой кабинет.
  * Мост window.Android сюда не подключается — приложение не видит ни номер, ни код из СМС;
  * сохраняется только сессия сайта (cookie), как в любом браузере.
  */
@@ -43,7 +42,7 @@ public class BrowserActivity extends Activity {
         bar.setPadding(pad * 2, pad / 2, pad, pad / 2);
 
         TextView title = new TextView(this);
-        title.setText("Войдите в аккаунт Uzum, затем нажмите «Готово»");
+        title.setText("Войдите в свой кабинет, затем нажмите «Готово»");
         title.setTextColor(Color.WHITE);
         title.setTextSize(13);
         bar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -78,19 +77,8 @@ public class BrowserActivity extends Activity {
         setContentView(root);
 
         String url = getIntent().getStringExtra("url");
-        if (url == null || !isUzum(url)) url = "https://uzum.uz/ru";
+        if (url == null || !Sites.allowed(url)) url = "https://uzum.uz/ru";
         web.loadUrl(url);
-    }
-
-    public static boolean isUzum(String url) {
-        try {
-            Uri u = Uri.parse(url);
-            String host = u.getHost();
-            return "https".equals(u.getScheme()) && host != null
-                    && (host.equals("uzum.uz") || host.endsWith(".uzum.uz"));
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     @Override

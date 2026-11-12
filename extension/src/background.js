@@ -1,5 +1,5 @@
-// Фоновый скрипт расширения: каждые полчаса открывает страницы товаров в свёрнутом окне,
-// читает их тем же extract.js, что и приложение для Android, записывает историю и показывает уведомления.
+// Фоновый скрипт расширения: каждые полчаса открывает страницы товаров (Uzum, Ozon, Wildberries) в свёрнутом окне,
+// читает их теми же скриптами web/extract*.js, что и приложение для Android, записывает историю и показывает уведомления.
 importScripts('core.js');
 
 const L = chrome.storage.local;
@@ -88,9 +88,11 @@ async function closeWork() {
   await chrome.storage.session.remove('work');
 }
 
-async function readPage() {
+async function readPage(site, skuId) {
   try {
-    const r = await chrome.scripting.executeScript({ target: { tabId: work.tabId }, files: ['extract.js'] });
+    // нужный размер (Wildberries) скрипт чтения берёт из window.__pmSku
+    await chrome.scripting.executeScript({ target: { tabId: work.tabId }, func: sku => { window.__pmSku = sku; }, args: [skuId] });
+    const r = await chrome.scripting.executeScript({ target: { tabId: work.tabId }, files: [Core.SITES[site].extract] });
     const v = r && r[0] ? r[0].result : null;
     return typeof v === 'string' ? JSON.parse(v) : null;
   } catch (e) {
@@ -100,7 +102,7 @@ async function readPage() {
 
 /** Читает карточку товара. Возвращает {status:'ok',res} | {status:'not_found'} | {status:'error',message}. */
 async function fetchProduct(p) {
-  const productId = Number(p.product_id), skuId = Number(p.sku_id || 0);
+  const site = Core.siteOf(p), productId = Number(p.product_id), skuId = Number(p.sku_id || 0);
   try {
     await navigate(p.url);
   } catch (e) {
@@ -110,9 +112,9 @@ async function fetchProduct(p) {
   let last = null, any = null, prevKey = null, stable = 0, notFound = 0;
   await sleep(1500);
   for (;;) {
-    const d = await readPage();
+    const d = await readPage(site, skuId);
     if (d) any = d;
-    if (d && Core.pageProductId(d.href) === productId) {
+    if (d && Core.pageProductId(site, d.href) === productId) {
       last = d;
       if (d.notFound && d.ready === 'complete') {
         if (++notFound >= 4) return { status: 'not_found' };
@@ -121,14 +123,14 @@ async function fetchProduct(p) {
         const verdict = Number(d.price) > 0 || !!d.soldOutText;
         const key = Core.stableKey(d);
         if (verdict && key === prevKey) {
-          if (++stable >= 3) return Core.finish(d, productId, skuId);
+          if (++stable >= 3) return Core.finish(d, site, productId, skuId);
         } else {
           stable = 0;
         }
         prevKey = key;
       }
     }
-    if (Date.now() > deadline) return Core.onTimeout(last, any, productId, skuId);
+    if (Date.now() > deadline) return Core.onTimeout(last, any, site, productId, skuId);
     await sleep(POLL_MS);
   }
 }
@@ -259,8 +261,8 @@ async function handle(m) {
     const u = Core.parseUrl(p.url);
     await lock(async () => {
       const all = await L.get(null);
-      const exists = Object.keys(all).some(k => k.startsWith('p:') && Number(all[k].product_id) === u.productId
-        && Number(all[k].sku_id || 0) === u.skuId);
+      const exists = Object.keys(all).some(k => k.startsWith('p:') && Core.siteOf(all[k]) === u.site
+        && Number(all[k].product_id) === u.productId && Number(all[k].sku_id || 0) === u.skuId);
       if (!exists) await L.set({ ['p:' + p.id]: Core.newProduct(u.url, [], Number(p.id)), ['c:' + p.id]: [] });
     });
     runChecks([Number(p.id)]);
@@ -292,7 +294,7 @@ async function handle(m) {
   }
   if (m.t === 'testnotify') {
     const level = await new Promise(r => chrome.notifications.getPermissionLevel(r));
-    const error = await show('test:' + Date.now(), 'Монитор цен для Uzum', 'Проверка: так выглядит уведомление об изменении цены.');
+    const error = await show('test:' + Date.now(), 'Монитор цен', 'Проверка: так выглядит уведомление об изменении цены.');
     return { level, error };
   }
   if (m.t === 'import') {

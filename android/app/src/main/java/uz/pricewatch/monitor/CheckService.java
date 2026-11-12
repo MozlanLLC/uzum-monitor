@@ -85,7 +85,7 @@ public class CheckService extends Service {
 
     private void begin() {
         try {
-            scraper = new Scraper(this, Updater.read(this, "extract.js"));
+            scraper = new Scraper(this);
         } catch (Exception e) {
             // на телефоне нет или обновляется системный WebView
             Long id;
@@ -112,7 +112,9 @@ public class CheckService extends Service {
             next();
             return;
         }
-        scraper.fetch(p.optString("url"), p.optLong("product_id"), p.optLong("sku_id"), new Scraper.Callback() {
+        final String site = Sites.normalize(p.optString("site"));
+        scraper.fetch(site, p.optString("url"), p.optLong("product_id"), p.optLong("sku_id"),
+                Updater.read(this, Sites.extractFile(site)), new Scraper.Callback() {
             @Override
             public void done(String status, JSONObject res, String message) {
                 if ("ok".equals(status)) {

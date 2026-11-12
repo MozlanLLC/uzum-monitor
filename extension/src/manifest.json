@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Монитор цен для Uzum",
-  "short_name": "Монитор Uzum",
-  "description": "Неофициальное расширение: следит за ценой, наличием и количеством товаров на uzum.uz и сообщает об изменениях.",
+  "name": "Монитор цен: Uzum, Ozon, Wildberries",
+  "short_name": "Монитор цен",
+  "description": "Неофициальное расширение: следит за ценой, наличием и количеством товаров на uzum.uz, ozon.uz и wildberries.uz и сообщает об изменениях.",
   "version": "1.0.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuxF6yLu6Tplu5SSvJZvsvqGXBnYfa44A9au9P1tT9Fygn1uHoxBGC90xYT98+rVBZNJkYU2ascDhjICJmGaotR6vU8K8INbWQY/ewxrENiw0hsDwzqOrJpmZQqZWJCn4IF/ZK2e2fIWi1k0999P9IE5XFGmME8kB56+d3MlOycmClPqM5MqzEUykp8iDfWBnZ60+AkV0ywTX7uNHmemRblwVikgENj/zFo7gR/vLhvvT5j8UVqsN+ag+dLQPe3Uyevrk94QjRkSTxrYHmSB+ECcPNpV41zrmccLGkJHBDGJSu0e32Fp15/etvcjoSqBl5Di9jtZx+7/ENF8ouJleDQIDAQAB",
   "minimum_chrome_version": "116",
@@ -13,7 +13,7 @@
     "128": "icons/128.png"
   },
   "action": {
-    "default_title": "Монитор цен для Uzum",
+    "default_title": "Монитор цен",
     "default_popup": "ui.html",
     "default_icon": {
       "16": "icons/16.png",
@@ -32,6 +32,10 @@
   ],
   "host_permissions": [
     "https://uzum.uz/*",
-    "https://www.uzum.uz/*"
+    "https://www.uzum.uz/*",
+    "https://ozon.uz/*",
+    "https://www.ozon.uz/*",
+    "https://wildberries.uz/*",
+    "https://www.wildberries.uz/*"
   ]
 }
