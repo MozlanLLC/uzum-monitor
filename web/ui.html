@@ -212,25 +212,30 @@ function favScript(){
     if(part) who=JSON.parse(atob(part.replace(/-/g,'+').replace(/_/g,'/'))).customer_id?'in':'out'; }catch(e){}
   return JSON.stringify({items, empty, who});
 }
-// Избранное Ozon: страница /my/favorites, плитки товаров
+// Избранное Ozon: страница /my/favorites. Список разбит на несколько блоков плиток и догружается при прокрутке;
+// ниже на той же странице идут рекомендации «Подобрали для вас» (блок island) — их не берём.
 function favOzon(){
   const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
   if(document.readyState!=='complete'&&el<15) return null;
   const txt=e=>e?(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim():'';
   const anon=!!document.querySelector('[data-widget="profileMenuAnonymous"]'), here=/^\/my\/favorites/.test(location.pathname);
-  if(anon||!here){ if(el<6) return null; return JSON.stringify({items:[],who:anon||!here?'out':''}); }
-  const grid=document.querySelector('[data-widget^="tileGrid"]')||document;
-  const map={}, order=[];
-  for(const a of grid.querySelectorAll('a[href*="/product/"]')){ const m=(a.getAttribute('href')||'').match(/(\/product\/(?:[^\/?#]*-)?(\d+))\/?(?:[?#]|$)/); if(!m) continue;
-    if(!map[m[2]]){ map[m[2]]={path:m[1],links:[]}; order.push(m[2]); } map[m[2]].links.push(a); }
-  if(!order.length&&el<10) return null;
-  if(order.length){ window.scrollTo(0,document.documentElement.scrollHeight);
-    if(W.__n!==order.length){ W.__n=order.length; W.__s=0; if(el<28) return null; }
-    else if(++W.__s<3&&el<28) return null; }
-  const items=order.map(id=>{ const o=map[id]; let box=o.links[0].closest('.tile-root');
-    if(!box){ box=o.links[0]; for(let i=0;i<6&&box.parentElement;i++){ if(box.parentElement.querySelectorAll('a[href*="/product/"]').length>o.links.length) break; box=box.parentElement; } }
-    const pm=txt(box).match(/\d[\d\s\u00a0\u202f]*\s*(?:so[ʻ'’`]?m|сум)/i), img=box.querySelector('img');
-    return {url:'https://www.ozon.uz'+o.path+'/', title:o.links.map(txt).sort((a,b)=>b.length-a.length)[0]||'', price:pm?pm[0].replace(/so[ʻ'’`]?m/i,'сум'):'', image:img?(img.currentSrc||img.getAttribute('src')||'').split('?')[0]:''}; });
+  if(anon||!here){ if(el<6) return null; return JSON.stringify({items:[],who:'out'}); }
+  const RE=/(\/product\/(?:[^\/?#]*-)?(\d+))\/?(?:[?#]|$)/;
+  const mine=e=>!e.closest('[data-widget="island"]');
+  const grids=[...document.querySelectorAll('[data-widget^="tileGrid"]')].filter(mine);
+  let tiles=[]; grids.forEach(g=>tiles.push(...g.querySelectorAll('.tile-root')));
+  if(!tiles.length){   // другая вёрстка: плиткой считаем блок вокруг ссылок на один товар
+    const map={}; (grids.length?grids:[document]).forEach(g=>{ for(const a of g.querySelectorAll('a[href*="/product/"]')){ if(!mine(a)) continue; const m=(a.getAttribute('href')||'').match(RE); if(!m) continue; (map[m[2]]=map[m[2]]||[]).push(a); } });
+    tiles=Object.keys(map).map(id=>{ const links=map[id]; let box=links[0]; for(let i=0;i<6&&box.parentElement;i++){ if(box.parentElement.querySelectorAll('a[href*="/product/"]').length>links.length) break; box=box.parentElement; } return box; }); }
+  if(!tiles.length&&el<10) return null;
+  if(tiles.length){ tiles[tiles.length-1].scrollIntoView({block:'end'}); window.scrollBy(0,300);   // догружаем продолжение именно избранного
+    if(W.__n!==tiles.length){ W.__n=tiles.length; W.__s=0; if(el<30) return null; }
+    else if(++W.__s<4&&el<30) return null; }
+  const seen={}, items=[];
+  for(const t of tiles){ const a=t.matches('a[href*="/product/"]')?t:t.querySelector('a[href*="/product/"]'); const m=a&&(a.getAttribute('href')||'').match(RE); if(!m||seen[m[2]]) continue; seen[m[2]]=1;
+    const all=txt(t), pm=all.match(/\d[\d\s  ]*\s*(?:so[ʻ'’`]?m|сум)/i), img=t.querySelector('img');
+    const title=[...t.querySelectorAll('a[href*="/product/"]')].map(txt).sort((x,y)=>y.length-x.length)[0]||(img&&img.getAttribute('alt'))||'';
+    items.push({url:'https://www.ozon.uz'+m[1]+'/', title, price:pm?pm[0].replace(/so[ʻ'’`]?m/i,'сум'):(/нет в наличии/i.test(all)?'нет в наличии':''), image:img?(img.currentSrc||img.getAttribute('src')||'').split('?')[0]:''}); }
   return JSON.stringify({items, who:'in'});
 }
 // Избранное Wildberries: страница /lk/favorites
