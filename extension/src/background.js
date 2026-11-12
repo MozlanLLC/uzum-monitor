@@ -138,12 +138,33 @@ async function fetchProduct(p) {
 let running = false;
 const queue = [];
 
-function notify(product, textMessage) {
+/** Счётчик непросмотренных изменений на значке расширения: виден, даже если система прячет уведомления. */
+async function setBadge(count) {
+  await L.set({ badge: count });
   try {
-    chrome.notifications.create('p:' + product.id + ':' + Date.now(), {
-      type: 'basic', iconUrl: 'icons/128.png', title: product.name || 'Товар', message: textMessage, priority: 2,
-    });
-  } catch (e) { /* уведомления выключены */ }
+    await chrome.action.setBadgeBackgroundColor({ color: '#7000FF' });
+    await chrome.action.setBadgeText({ text: count > 0 ? (count > 99 ? '99+' : String(count)) : '' });
+  } catch (e) { /* значок недоступен */ }
+}
+
+/** Показывает уведомление. Возвращает '' или текст ошибки браузера. */
+function show(id, title, message) {
+  return new Promise(resolve => {
+    try {
+      // requireInteraction: уведомление не исчезает само через несколько секунд
+      chrome.notifications.create(id, {
+        type: 'basic', iconUrl: chrome.runtime.getURL('icons/128.png'), title, message, priority: 2, requireInteraction: true,
+      }, () => resolve(chrome.runtime.lastError ? String(chrome.runtime.lastError.message) : ''));
+    } catch (e) {
+      resolve(String(e && e.message));
+    }
+  });
+}
+
+async function notify(product, textMessage) {
+  await setBadge(((await get('badge')) || 0) + 1);
+  const error = await show('p:' + product.id + ':' + Date.now(), product.name || 'Товар', textMessage);
+  if (error) await L.set({ notify_error: error });
 }
 
 async function save(id, result) {
@@ -155,9 +176,9 @@ async function save(id, result) {
       const r = Core.applyResult(p, checks, result.res, await getPrefs());
       checks.push(r.check);
       await L.set({ ['p:' + id]: r.product, ['c:' + id]: checks });
-      if (r.notify) notify(r.product, r.notify);
+      if (r.notify) await notify(r.product, r.notify);
     } else if (result.status === 'not_found') {
-      if (p.status !== 'not_found') notify(p, Core.NOT_FOUND);
+      if (p.status !== 'not_found') await notify(p, Core.NOT_FOUND);
       await L.set({ ['p:' + id]: Core.withNotFound(p) });
     } else {
       await L.set({ ['p:' + id]: Core.withError(p, result.message || 'Неизвестная ошибка') });
@@ -264,6 +285,15 @@ async function handle(m) {
     if (m.key !== 'notify_stock' && m.key !== 'tab_mode') return { ok: false };
     await lock(async () => L.set({ prefs: Object.assign({}, await getPrefs(), { [m.key]: !!m.value }) }));
     return { ok: true };
+  }
+  if (m.t === 'seen') {
+    await setBadge(0);
+    return { ok: true };
+  }
+  if (m.t === 'testnotify') {
+    const level = await new Promise(r => chrome.notifications.getPermissionLevel(r));
+    const error = await show('test:' + Date.now(), 'Монитор цен для Uzum', 'Проверка: так выглядит уведомление об изменении цены.');
+    return { level, error };
   }
   if (m.t === 'import') {
     return lock(async () => {

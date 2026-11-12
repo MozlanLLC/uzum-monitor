@@ -1,7 +1,8 @@
 // Собирает расширение в extension/dist: файлы из extension/src плюс интерфейс и чтение карточки из web/.
 // Интерфейс общий с приложением для Android; здесь его встроенный скрипт выносится в отдельный файл,
 // потому что расширениям запрещены скрипты внутри страницы.
-// Запуск: node extension/build.mjs [версия]
+// Запуск: node extension/build.mjs [версия] [--store]
+// --store — вариант для загрузки в магазин расширений: без поля key, идентификатор назначит магазин.
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, '..', 'web');
 const dist = join(here, 'dist');
-const version = process.argv[2] || process.env.EXT_VERSION || '';
+const args = process.argv.slice(2);
+const store = args.includes('--store');
+const version = args.find(a => !a.startsWith('--')) || process.env.EXT_VERSION || '';
 
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
@@ -33,5 +36,6 @@ if (version) {
   if (!/^\d+(\.\d+){0,3}$/.test(version)) throw new Error('Версия должна состоять из чисел через точку: ' + version);
   manifest.version = version;
 }
+if (store) delete manifest.key;
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-console.log(`Расширение ${manifest.version} (интерфейс №${webVersion}) собрано в ${dist}`);
+console.log(`Расширение ${manifest.version} (интерфейс №${webVersion})${store ? ' для магазина' : ''} собрано в ${dist}`);

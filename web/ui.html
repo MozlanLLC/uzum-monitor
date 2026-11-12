@@ -334,7 +334,8 @@ function viewSettings(){
   const row=(title,sub,ok,key,btn)=>`<div class="setrow"><div>${title}<small>${sub}</small></div>${ok?'<span class="ok">включено</span>':`<button class="ghost" type="button" data-s="${key}">${btn}</button>`}</div>`;
   const perms=EXT?`<div class="card"><h2>Как работает расширение</h2><p class="note">Цены проверяются каждые полчаса, пока открыт браузер. Для проверки расширение ненадолго открывает страницы товаров в свёрнутом окне и само его закрывает. Цены видны так же, как вам на сайте: если вы вошли на uzum.uz, они будут личными.</p>
   <div class="setrow"><div>Открывать в фоновой вкладке<small>Включите, если свёрнутое окно мешает или проверки не проходят</small></div><input type="checkbox" id="tabmode" aria-label="Открывать страницы в фоновой вкладке" ${i.tab_mode?'checked':''}></div>
-  ${HAS('openTab')&&!document.documentElement.classList.contains('tab')?'<div class="acts"><button class="ghost" type="button" id="astab">Открыть в отдельной вкладке</button></div>':''}</div>`
+  <div class="acts">${HAS('testNotify')?'<button class="ghost" type="button" id="testn">Проверить уведомление</button>':''}${HAS('openTab')&&!document.documentElement.classList.contains('tab')?'<button class="ghost" type="button" id="astab">Открыть в отдельной вкладке</button>':''}</div>
+  <p class="note" style="margin-top:10px">Уведомление приходит, только когда что-то изменилось: цена, наличие или количество. Новые изменения также видны числом на значке расширения. Если проверочное уведомление не появилось, разрешите уведомления для браузера в системе (Windows: Параметры → Система → Уведомления; macOS: Системные настройки → Уведомления) и выключите режим «Не беспокоить».</p></div>`
   :`<div class="card"><h2>Разрешения</h2>
   ${row('Уведомления','Без разрешения приложение не сможет сообщать об изменениях',i.notif,'notifications','Разрешить')}
   ${row('Работа в фоне','Отключите экономию батареи, иначе телефон будет пропускать проверки',i.battery,'battery','Настроить')}
@@ -443,6 +444,7 @@ $('#view').addEventListener('click',e=>{
     if(b.id==='login2') login();
     if(b.id==='logout2') openAcct();
     if(b.id==='astab') Android.openTab();
+    if(b.id==='testn') Android.testNotify();
     if(b.id==='exp') Android.exportData();
     if(b.id==='imp') Android.importData();
     if(b.id==='diagb'){ diag='Собираю данные…'; refresh(true); runOnPage(S.products[0].url,diagScript,r=>{ const page=r||'Страница не ответила.';
