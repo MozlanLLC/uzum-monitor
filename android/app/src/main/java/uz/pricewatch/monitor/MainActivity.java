@@ -49,9 +49,14 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, request.getUrl()));
-                } catch (Exception ignored) {
+                // Интерфейс сам никуда не переходит; ссылки открываем во внешнем браузере и только https —
+                // никаких intent:, file: и других схем, которые могли бы запустить чужие приложения
+                if ("https".equals(request.getUrl().getScheme())) {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, request.getUrl())
+                                .addCategory(Intent.CATEGORY_BROWSABLE));
+                    } catch (Exception ignored) {
+                    }
                 }
                 return true;
             }

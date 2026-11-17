@@ -13,11 +13,15 @@ html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,Roboto,sans-serif}
 button{font:inherit;color:inherit}
 header{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;gap:8px;padding:14px 14px 8px}
-h1{margin:0;font-size:22px;font-weight:700;flex:1;letter-spacing:-.01em}
+h1{margin:0;font-size:22px;font-weight:700;flex:1;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:420px){header .login{padding:0 10px;gap:6px}}
 .login{height:44px;border-radius:12px;border:0;background:var(--acc);color:var(--acc-ink);font-size:14px;font-weight:600;padding:0 14px;display:flex;align-items:center;gap:8px;max-width:58vw;flex:none}
 .login svg{flex:none}
 .login span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .login.in{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+#pausebtn{padding:0 12px}
+#pausebtn.off{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+@media (max-width:420px){#pausebtn span{display:none}}
 .bar{position:fixed;left:0;right:0;bottom:66px;z-index:6;display:flex;gap:8px;padding:10px 14px;background:var(--bg);border-top:1px solid var(--line)}
 .bar .primary{flex:1}
 .bar .primary:disabled{opacity:.5}
@@ -47,6 +51,7 @@ main{padding:0 14px 170px}
 .cardp{font-size:12.5px;color:var(--acc);font-weight:600}
 .cb{font-size:12.5px;color:var(--good);font-weight:600}
 .tag.lbl{background:#d81b23;color:#fff}
+.status.paused{background:var(--warn-bg,#fff4d6);border-radius:12px;padding:8px 10px}
 .spark{width:84px;height:36px;flex:none}
 .tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
 .tag{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;background:var(--bg);color:var(--mute)}
@@ -122,6 +127,7 @@ html.tab .sheet{max-width:480px}
 .newver a{color:var(--acc);font-weight:600}
 </style></head><body>
 <header><h1 id="title">Товары</h1>
+<button class="login in" id="pausebtn" type="button" hidden></button>
 <button class="login" id="login" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path></svg><span id="logintext">Войти в Uzum</span></button></header>
 <main id="view"></main>
 <button class="fab" id="fab" type="button" aria-label="Добавить товар"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
@@ -155,7 +161,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const store={get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch(e){ return d; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }};
 // Номер сборки приложения, начиная с которой работают все функции интерфейса.
 // Увеличивается только когда меняется код в android/ и без нового APK что-то не заработает.
-const NEED_APP=9;
+const NEED_APP=10;
 const HAS=m=>!!(window.Android&&typeof Android[m]==='function');
 // Тот же интерфейс работает в расширении для браузера: там window.Android подставляет extension/src/shim.js
 const EXT=!!(window.Android&&Android.platform==='ext');
@@ -178,6 +184,13 @@ const cbOf=p=>{ const price=best(p)||0, set=cbSet(p.cashback_set);
   if(/%$/.test(set)){ const pct=Number(set.slice(0,-1)); return {pct,sum:Math.round(price*pct/100),own:true}; }
   if(set) return {pct:null,sum:Number(set),own:true};
   const pct=Number(p.cashback)||0; return pct>0?{pct,sum:Math.round(price*pct/100),own:false}:null; };
+// Остановка проверок: paused_until — время возобновления в секундах, -1 — пока не включат, 0 — проверки идут
+const PAUSE=HAS('setPaused');
+const pausedUntil=()=>Number((S.info||{}).paused_until)||0;
+const isPaused=()=>{ const u=pausedUntil(); return u<0||u>(S.now||Date.now()/1000); };
+const pauseText=()=>{ const u=pausedUntil(); return u<0?'Проверки остановлены':'Проверки остановлены до '+(when(u).replace(/^в /,'')); };
+// Ближайшие 9:00 утра
+const morning=()=>{ const d=new Date(); d.setHours(9,0,0,0); if(d.getTime()<=Date.now()) d.setDate(d.getDate()+1); return Math.floor(d.getTime()/1000); };
 const pctText=x=>String(x).replace('.',',')+'%';
 const siteOf=p=>SITE_NAMES[p.site]?p.site:'uzum';
 const pid=p=>siteOf(p)+':'+p.product_id+':'+(p.sku_id||0);
@@ -187,7 +200,7 @@ const go=u=>{ if(HAS('openUrl')) Android.openUrl(u); else location.href=u; };
 const appBuild=()=>{ const m=String((S&&S.info&&S.info.app)||'').match(/(\d+)$/); return m?Number(m[1]):0; };
 const outdated=()=>!!window.Android&&!EXT&&appBuild()>0&&appBuild()<NEED_APP;
 const SORTS={new:'Сначала новые',changed:'Недавно менялись',drop:'Сильнее подешевели',price:'Сначала дешёвые',name:'По названию'};
-let sort=store.get('sort','new'), query='', targetEdit=false, sizePick=null, cbEdit=false; if(!SORTS[sort]) sort='new';
+let sort=store.get('sort','new'), query='', targetEdit=false, sizePick=null, cbEdit=false, pauseMenu=false; if(!SORTS[sort]) sort='new';
 const TITLES={products:'Товары',changes:'Изменения',favorites:'Избранное',settings:'Настройки'};
 let tab='products', filter='all', open={}, hist={}, onlyChanges={}, lastKey='', S=null;
 let fav=null, favMsg='', favSel={}, favBusy=false, shop='all', diag='', waiters={}, menuId=null, menuSure=false;
@@ -453,7 +466,8 @@ function viewProducts(){
   const shops=countBy(ps); if(shop!=='all'&&!shops[shop]) shop='all';
   const list=sorted((filter==='cheaper'?ps.filter(cheaper):filter==='in'?ps.filter(inStock):filter==='out'?ps.filter(outOf):ps).filter(p=>shop==='all'||siteOf(p)===shop).filter(matches));
   if(!n) return newVer()+'<div class="empty">Пока ничего не отслеживается.<br><br>Нажмите «+», чтобы добавить товар по ссылке, или выберите товары во вкладке «Избранное».</div>';
-  return `${newVer()}<div class="status"><span>${S.busy?'Идёт проверка…':'Следующая проверка в '+hm(S.next_run)}</span><button class="ghost" type="button" id="all" ${S.busy?'disabled':''}>Проверить все</button></div>
+  return `${newVer()}${PAUSE&&isPaused()?`<div class="status paused"><span>${pauseText()}</span><button class="ghost" type="button" id="resume">Возобновить</button></div>`
+    :`<div class="status"><span>${S.busy?'Идёт проверка…':'Следующая проверка в '+hm(S.next_run)}</span><button class="ghost" type="button" id="all" ${S.busy?'disabled':''}>Проверить все</button></div>`}
   <div class="chips"><button type="button" class="chip ${filter==='all'?'on':''}" data-filter="all">Все · ${n}</button><button type="button" class="chip ${filter==='in'?'on':''}" data-filter="in">В наличии · ${ps.filter(inStock).length}</button><button type="button" class="chip ${filter==='cheaper'?'on':''}" data-filter="cheaper">Подешевели · ${ps.filter(cheaper).length}</button><button type="button" class="chip ${filter==='out'?'on':''}" data-filter="out">Нет в наличии · ${ps.filter(outOf).length}</button></div>
   ${shopChips(shops,n)}
   <div class="tools"><input id="q" type="search" placeholder="Поиск по названию" aria-label="Поиск по названию" autocomplete="off" value="${esc(query)}">
@@ -495,7 +509,10 @@ function viewSettings(){
   ${row('Уведомления','Без разрешения приложение не сможет сообщать об изменениях',i.notif,'notifications','Разрешить')}
   ${row('Работа в фоне','Отключите экономию батареи, иначе телефон будет пропускать проверки',i.battery,'battery','Настроить')}
   ${row('Точное время проверок','Чтобы проверки шли ровно в :00 и :30',i.exact,'alarms','Разрешить')}</div>`;
-  return `${newVer()}${perms}
+  const stop=PAUSE?`<div class="card"><h2>Проверки</h2>
+  <p class="note">${isPaused()?`<b>${pauseText()}.</b> `:''}${EXT?'Пока проверки остановлены, расширение не открывает страницы магазинов и не присылает уведомлений.':'Пока проверки остановлены, приложение не работает в фоне, не расходует батарею и не присылает уведомлений.'} Список товаров и история сохраняются; товар можно проверить вручную из его меню.</p>
+  <div class="acts">${isPaused()?'<button class="primary" type="button" id="resume">Возобновить проверки</button>':'<button class="ghost" type="button" id="pause">Остановить проверки</button>'}</div></div>`:'';
+  return `${newVer()}${stop}${perms}
   <div class="card"><h2>Уведомления</h2>
   <div class="setrow"><div>Сообщать об изменении количества<small>Если выключить — только цена и наличие</small></div><input type="checkbox" id="ns" aria-label="Сообщать об изменении количества" ${i.notify_stock?'checked':''}></div></div>
   <div class="card"><h2>${EXT?'Сайты':'Личные кабинеты'}</h2><p class="note">${EXT?'Расширение пользуется вашим входом на сайтах в этом браузере. Войдите на '+siteListOr()+' — и монитор увидит ваши личные цены и избранное.':'После входа монитор видит ваши личные цены и избранное на '+siteList()+'. Номер и код вы вводите на самом сайте — приложение их не видит.'}</p>
@@ -515,6 +532,11 @@ function refresh(force){
   const key=JSON.stringify([s.products,s.busy,s.next_run,s.info,tab,filter,open,onlyChanges,fav,favMsg,favSel,favBusy,shop,diag,fresh,acct,query,sort]);
   if(key===lastKey&&!force) return; lastKey=key;
   $('#title').textContent=TITLES[tab];
+  const pb=$('#pausebtn'); pb.hidden=!PAUSE;
+  if(PAUSE){ const off=isPaused(); pb.classList.toggle('off',off);
+    pb.innerHTML=off?'<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg><span>Включить</span>'
+      :'<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg><span>Пауза</span>';
+    pb.setAttribute('aria-label',off?pauseText()+'. Включить проверки':'Остановить проверки'); }
   $('#login').classList.add('in'); $('#logintext').textContent=EXT?'Сайты':'Аккаунты';
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const bd=$('#badge'); bd.hidden=!(fresh&&tab!=='changes'); bd.textContent=fresh>99?'99+':fresh;
@@ -544,7 +566,13 @@ function loadFav(only,done){ if(favBusy) return; favBusy=true; favMsg='';
         fav=(fav||[]).concat(d.items.map(x=>({site,url:x.url,title:x.title,price:x.price,image:x.image}))); }
       refresh(true); step(i+1); }); };
   step(0); }
-function openAcct(){ acctMenu=true; menuId=null;
+function openPause(){ acctMenu=false; pauseMenu=true; menuId=null;
+  $('#menubody').innerHTML=`<h2>Остановить проверки</h2><p class="note">${S.busy?'Идущая сейчас проверка тоже остановится. ':''}На время остановки ${EXT?'расширение':'приложение'} не будет проверять цены и присылать уведомления.</p>
+  <button class="item" type="button" data-act="p-3h">На 3 часа</button>
+  <button class="item" type="button" data-act="p-morning">До утра (${new Date(morning()*1000).toDateString()===new Date().toDateString()?'сегодня':'завтра'} в 9:00)</button>
+  <button class="item" type="button" data-act="p-off">Пока не включу</button>`;
+  $('#menu').hidden=false; }
+function openAcct(){ acctMenu=true; pauseMenu=false; menuId=null;
   const item=site=>SUPPORTED.indexOf(site)>=0?`<button class="item" type="button" data-act="acc-${site}">${SITE_NAMES[site]}<span class="${acct[site]==='in'?'ok':'mut'}">${acctNote(site)}</span></button>`:'';
   $('#menubody').innerHTML=`<h2>${EXT?'Сайты':'Личные кабинеты'}</h2>
   <p class="note">${EXT?'Расширение видит цены так же, как вы в этом браузере. Нажмите на сайт, чтобы открыть его и войти, — цены станут личными.':'Нажмите на сайт и войдите в свой кабинет — монитор будет видеть ваши личные цены и избранное. Номер и код вы вводите на самом сайте, приложение их не видит.'}</p>
@@ -559,7 +587,7 @@ function logout(){ if(!CANOUT||outBusy) return; outBusy=true;
   const step=i=>{ if(i<sites.length){ runOnPage(LOGIN[sites[i]],wipeScript,()=>step(i+1)); return; }
     Android.logoutUzum(); outBusy=false; SUPPORTED.forEach(k=>setAcct(k,'out')); fav=null; favSel={}; favMsg='Вы вышли из личных кабинетов.'; refresh(true); };
   step(0); }
-function openMenu(id){ acctMenu=false; targetEdit=false; sizePick=null; cbEdit=false; menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
+function openMenu(id){ acctMenu=false; pauseMenu=false; targetEdit=false; sizePick=null; cbEdit=false; menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
 function drawTarget(p){
   $('#menubody').innerHTML=`<h2>Желаемая цена</h2><p class="note">${esc(p.name||'Товар')}${p.variant?' · '+esc(p.variant):''}. Сейчас ${money(best(p))}. Уведомление о цене придёт, только когда она станет не выше указанной. О наличии приложение сообщает как обычно.</p>
   <input id="tp" type="text" inputmode="numeric" placeholder="Цена в сумах" aria-label="Желаемая цена в сумах" autocomplete="off" value="${p.target_price?num(p.target_price):''}">
@@ -597,6 +625,7 @@ function drawMenu(){ const p=S.products.find(x=>x.id===menuId); if(!p){ $('#menu
   <button class="item" type="button" data-act="site">Открыть на ${SITE_NAMES[siteOf(p)]}</button>
   <button class="item danger" type="button" data-act="del">${menuSure?'Точно удалить вместе с историей?':'Удалить'}</button>`; }
 $('#login').addEventListener('click',openAcct);
+$('#pausebtn').addEventListener('click',()=>{ if(isPaused()){ call('setPaused',0); setTimeout(()=>refresh(true),300); } else openPause(); });
 $('#nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; tab=b.dataset.tab; window.scrollTo(0,0);
   if(tab==='favorites'&&CAN&&!fav) loadFav(); else refresh(true); });
 $('#fab').addEventListener('click',()=>{ $('#msg').textContent=''; $('#addsheet').hidden=false; $('#u').focus();
@@ -608,6 +637,9 @@ $('#addclose').addEventListener('click',()=>{ $('#addsheet').hidden=true; });
 $('#addsheet').addEventListener('click',e=>{ if(e.target.id==='addsheet') $('#addsheet').hidden=true; });
 $('#menu').addEventListener('click',e=>{ if(e.target.id==='menu'){ $('#menu').hidden=true; return; }
   const b=e.target.closest('button'); if(!b) return; const a=b.dataset.act;
+  if(pauseMenu){ $('#menu').hidden=true; pauseMenu=false;
+    const until=a==='p-3h'?Math.floor(Date.now()/1000)+3*3600:a==='p-morning'?morning():a==='p-off'?-1:0;
+    if(until) call('setPaused',until); setTimeout(()=>refresh(true),300); return; }
   if(acctMenu){ if(a==='acc-check'){ loadFav(null,()=>{ if(acctMenu&&!$('#menu').hidden) openAcct(); }); openAcct(); return; }
     $('#menu').hidden=true; acctMenu=false; if(a&&a.indexOf('acc-')===0) login(a.slice(4)); if(a==='logout') logout(); return; }
   const p=S.products.find(x=>x.id===menuId); if(!p) return;
@@ -642,6 +674,8 @@ $('#view').addEventListener('click',e=>{
   const b=e.target.closest('button');
   if(b){
     if(b.id==='all'){ call('check',0); setTimeout(()=>refresh(true),300); }
+    if(b.id==='pause') openPause();
+    if(b.id==='resume'){ call('setPaused',0); setTimeout(()=>refresh(true),300); }
     if(b.dataset.filter){ filter=b.dataset.filter; refresh(true); }
     if(b.id==='favload') loadFav();
     if(b.dataset.shop){ shop=b.dataset.shop; refresh(true); }

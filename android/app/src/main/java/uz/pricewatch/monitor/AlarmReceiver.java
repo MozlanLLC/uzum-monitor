@@ -9,6 +9,7 @@ public class AlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent intent) {
         Scheduler.scheduleNext(c);
+        if (Scheduler.paused(c)) return;   // проверки остановлены пользователем
         try {
             if (!Store.get(c).allIds().isEmpty()) CheckService.start(c, 0);
         } catch (Exception e) {
