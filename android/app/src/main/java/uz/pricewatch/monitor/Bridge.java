@@ -84,6 +84,12 @@ public class Bridge {
         Store.get(act).setTarget((long) id, (long) price);
     }
 
+    /** Кешбэк товара: «10%» или сумма в сумах; пустая строка — убрать. */
+    @JavascriptInterface
+    public void setCashback(double id, String value) {
+        Store.get(act).setCashback((long) id, value);
+    }
+
     /** Резервная копия: сохранить список товаров и историю в файл, который выберет пользователь. */
     @JavascriptInterface
     public void exportData() {
@@ -175,7 +181,7 @@ public class Bridge {
     /** Сайты, за товарами которых умеет следить эта сборка: по этому списку интерфейс узнаёт о поддержке. */
     @JavascriptInterface
     public String sites() {
-        return "uzum,ozon,wb";
+        return "uzum,ozon,wb,mc";
     }
 
     /** Открывает сайт (Uzum, Ozon, Wildberries) на отдельном экране — для входа в личный кабинет. */

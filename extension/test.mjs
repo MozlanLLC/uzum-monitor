@@ -13,7 +13,7 @@ test('ссылки на товар', () => {
     { site: 'uzum', url: 'https://uzum.uz/ru/product/shina-777', productId: 777, skuId: 0 });
   assert.equal(Core.parseUrl('uzum.uz/product/555').productId, 555);
   assert.throws(() => Core.parseUrl(''), /Вставьте ссылку/);
-  assert.throws(() => Core.parseUrl('https://example.com/product/a-1'), /не ссылка на Uzum, Ozon или Wildberries/);
+  assert.throws(() => Core.parseUrl('https://example.com/product/a-1'), /не ссылка на Uzum, Ozon, Wildberries или MCosmetic/);
   assert.throws(() => Core.parseUrl('https://uzum.uz/ru/wishes'), /Не похоже на ссылку товара/);
   assert.throws(() => Core.parseUrl('https://uzum.uz.evil.com/ru/product/a-1'), /не ссылка на|Не похоже/);
 });
@@ -61,7 +61,7 @@ test('оценка прочитанной карточки', () => {
   const ok = Core.finish(page(), 'uzum', 10, 3);
   assert.equal(ok.status, 'ok');
   assert.deepEqual(ok.res, { name: 'Товар', price: 1000, old_price: 1500, card_price: 900, in_stock: true, stock: 7,
-    image: 'https://images.uzum.uz/x.jpg', seller: 'Магазин', variant: 'Серый', warning: '', sizes: null });
+    image: 'https://images.uzum.uz/x.jpg', seller: 'Магазин', variant: 'Серый', warning: '', sizes: null, cashback: 0 });
   assert.match(Core.finish(page({ retailerId: '11' }), 'uzum', 10, 3).message, /другому товару/);
   assert.match(Core.finish(page({ ogTitle: 'Совсем другое' }), 'uzum', 10, 3).message, /не совпало/);
   assert.match(Core.finish(page({ href: 'https://uzum.uz/ru/product/a-10?skuId=4' }), 'uzum', 10, 3).res.warning, /переключил вариант/);
@@ -157,6 +157,49 @@ test('резервная копия туда и обратно', () => {
   assert.deepEqual(mix.items.map(x => [x.product.site, x.product.url, x.product.sku_id]), [['ozon', 'https://www.ozon.uz/product/a-10/', 0],
     ['uzum', 'https://uzum.uz/ru/product/a-10', 0], ['wb', 'https://www.wildberries.uz/catalog/10/detail.aspx?size=7', 7]], 'сайт определяется по ссылке');
   assert.equal(mix.items[0].product.image, 'https://ir-3.ozone.ru/i.jpg');
+});
+
+test('MCosmetic: ссылки и карточка', () => {
+  assert.deepEqual(Core.parseUrl('https://www.mcosmetic.uz/p/loreal-paradise-6-4-50372'),
+    { site: 'mc', url: 'https://www.mcosmetic.uz/p/loreal-paradise-6-4-50372', productId: 50372, skuId: 0 });
+  assert.deepEqual(Core.parseUrl('Смотри mcosmetic.uz/p/loreal-paris-infaillible-320-11-50327/?sku=1000279035&utm=x'),
+    { site: 'mc', url: 'https://www.mcosmetic.uz/p/loreal-paris-infaillible-320-11-50327?sku=1000279035', productId: 50327, skuId: 1000279035 });
+  assert.throws(() => Core.parseUrl('https://www.mcosmetic.uz/c/tushi-dlya-resnits-4991'), /mcosmetic\.uz\/p/);
+  assert.equal(Core.pageProductId('mc', 'https://www.mcosmetic.uz/p/loreal-paris-infaillible-320-11-50327?sku=1'), 50327);
+  assert.ok(Core.allowedUrl('https://www.mcosmetic.uz/cabinet'));
+  const d = { href: 'https://www.mcosmetic.uz/p/a-50327?sku=7', ready: 'complete', name: 'Консилер, тон 324', price: 136400, oldPrice: 160500,
+    cardPrice: null, image: 'https://s3.eu-west-2.amazonaws.com/catalog.jiffy-software.com/offers/1.jpg', ogImage: '', seller: '', variant: '11 мл, тон 324',
+    stock: 2, canBuy: true, soldOutText: false, ogTitle: '', retailerId: '50327', cashback: 15, warning: '',
+    sizes: [{ id: 7, name: 'тон 324', price: 136400, qty: 2 }, { id: 8, name: 'тон 325', price: null, qty: 0 }] };
+  const r = Core.finish(d, 'mc', 50327, 7);
+  assert.equal(r.status, 'ok'); assert.equal(r.res.cashback, 15); assert.equal(r.res.stock, 2); assert.equal(r.res.sizes.length, 2);
+  assert.equal(r.res.image, d.image);
+  assert.match(Core.finish(Object.assign({}, d, { retailerId: '50372' }), 'mc', 50327, 7).message, /другому товару/);
+  assert.equal(Core.finish(Object.assign({}, d, { image: 'https://evil.example/1.jpg' }), 'mc', 50327, 7).res.image, '');
+});
+
+test('кешбэк', () => {
+  assert.equal(Core.cashbackSet('10 %'), '10%'); assert.equal(Core.cashbackSet('7,5%'), '7.5%'); assert.equal(Core.cashbackSet('10 000'), '10000');
+  assert.equal(Core.cashbackSet('0'), ''); assert.equal(Core.cashbackSet('150%'), ''); assert.equal(Core.cashbackSet('abc'), ''); assert.equal(Core.cashbackSet(null), '');
+  assert.deepEqual(Core.cashbackOf({ cashback_set: '10%' }, 100000), { pct: 10, sum: 10000, own: true });
+  assert.deepEqual(Core.cashbackOf({ cashback_set: '12000', cashback: 15 }, 100000), { pct: null, sum: 12000, own: true });
+  assert.deepEqual(Core.cashbackOf({ cashback: 15 }, 112600), { pct: 15, sum: 16890, own: false });
+  assert.equal(Core.cashbackOf({ cashback: 0 }, 100000), null);
+  // изменение кешбэка на сайте попадает в историю и уведомление
+  let p = Core.newProduct('https://www.mcosmetic.uz/p/a-50327', [], 1), checks = [];
+  const step = cb => { const r = Core.applyResult(p, checks, { name: 'Т', price: 1000, old_price: 0, card_price: 0, in_stock: true, stock: 3,
+    image: '', seller: '', variant: '', warning: '', cashback: cb }, {}); p = r.product; checks = checks.concat([r.check]); return r; };
+  assert.equal(step(15).event, 'Начало наблюдения'); assert.equal(p.cashback, 15);
+  assert.equal(step(15).notify, '');
+  assert.equal(step(20).notify, 'Кешбэк: 15% → 20%');
+  assert.equal(step(0).notify, 'Кешбэк 20% больше не действует');
+  assert.equal(step(10).notify, 'Появился кешбэк 10%');
+  // товары без кешбэка на сайте (Uzum и др.) не дают лишних записей
+  let q = Core.newProduct('https://uzum.uz/ru/product/a-10', [], 2), qc = [];
+  for (let i = 0; i < 2; i++) { const r = Core.applyResult(q, qc, { name: 'Т', price: 1000, in_stock: true, stock: null }, {}); q = r.product; qc = qc.concat([r.check]); assert.equal(r.notify, ''); }
+  // резервная копия хранит кешбэк, указанный вручную
+  const back = Core.importData(JSON.parse(JSON.stringify(Core.exportData([Object.assign(p, { cashback_set: '5%' })], {}))), []);
+  assert.equal(back.items[0].product.cashback_set, '5%'); assert.equal(back.items[0].product.site, 'mc');
 });
 
 console.log(`\nВсе проверки пройдены: ${n}`);

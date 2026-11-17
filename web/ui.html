@@ -45,6 +45,7 @@ main{padding:0 14px 170px}
 .price{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .oldl{color:var(--mute);font-size:12px;font-variant-numeric:tabular-nums}
 .cardp{font-size:12.5px;color:var(--acc);font-weight:600}
+.cb{font-size:12.5px;color:var(--good);font-weight:600}
 .spark{width:84px;height:36px;flex:none}
 .tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
 .tag{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;background:var(--bg);color:var(--mute)}
@@ -153,14 +154,30 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const store={get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch(e){ return d; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }};
 // Номер сборки приложения, начиная с которой работают все функции интерфейса.
 // Увеличивается только когда меняется код в android/ и без нового APK что-то не заработает.
-const NEED_APP=8;
+const NEED_APP=9;
 const HAS=m=>!!(window.Android&&typeof Android[m]==='function');
 // Тот же интерфейс работает в расширении для браузера: там window.Android подставляет extension/src/shim.js
 const EXT=!!(window.Android&&Android.platform==='ext');
 // Сайты, за товарами которых умеет следить эта сборка. Старые сборки приложения знают только Uzum.
-const SITE_NAMES={uzum:'Uzum',ozon:'Ozon',wb:'Wildberries'}, CARD_LABEL={uzum:'с картой Uzum',ozon:'с Ozon Картой',wb:'с WB Кошельком'};
-const LOGIN={uzum:'https://uzum.uz/ru/wishes',ozon:'https://www.ozon.uz/',wb:'https://www.wildberries.uz/security/login'};
+const SITE_NAMES={uzum:'Uzum',ozon:'Ozon',wb:'Wildberries',mc:'MCosmetic'}, CARD_LABEL={uzum:'с картой Uzum',ozon:'с Ozon Картой',wb:'с WB Кошельком',mc:'с картой'};
+const LOGIN={uzum:'https://uzum.uz/ru/wishes',ozon:'https://www.ozon.uz/',wb:'https://www.wildberries.uz/security/login',mc:'https://www.mcosmetic.uz/cabinet'};
 const MULTI=HAS('sites');
+// Сайты, которые знает установленная сборка (приложение 1.0.8 — без MCosmetic)
+const SUPPORTED=(()=>{ try{ if(MULTI) return String(Android.sites()).split(',').filter(k=>SITE_NAMES[k]); }catch(e){} return ['uzum']; })();
+const siteList=()=>{ const n=SUPPORTED.map(k=>SITE_NAMES[k]); return n.length>1?n.slice(0,-1).join(', ')+' и '+n[n.length-1]:n[0]; };
+const siteListOr=()=>{ const n=SUPPORTED.map(k=>SITE_NAMES[k]); return n.length>1?n.slice(0,-1).join(', ')+' или '+n[n.length-1]:n[0]; };
+const missing=()=>Object.keys(SITE_NAMES).filter(k=>SUPPORTED.indexOf(k)<0).map(k=>SITE_NAMES[k]);
+// Варианты товара, из которых пользователь выбирает, за каким следить: размеры Wildberries, оттенки и объёмы MCosmetic
+const VARS={wb:{param:'size',title:'Какой размер отслеживать',item:'Выбрать размер',one:'Размер',tag:'размер не выбран',rest:'без размера'},
+  mc:{param:'sku',title:'Какой вариант отслеживать',item:'Выбрать оттенок или объём',one:'Вариант',tag:'вариант не выбран',rest:'без выбранного варианта'}};
+// Кешбэк: указанный вручную («10%» или сумма) важнее того, что показывает сайт. То же в extension/src/core.js
+const cbSet=v=>{ const t=String(v==null?'':v).replace(/[\s\u00a0]/g,'').replace(',','.'); let m=t.match(/^(\d{1,2}(?:\.\d)?)%$/);
+  if(m&&Number(m[1])>0) return String(Number(m[1]))+'%'; m=t.match(/^(\d{1,9})$/); return m&&Number(m[1])>0?String(Number(m[1])):''; };
+const cbOf=p=>{ const price=best(p)||0, set=cbSet(p.cashback_set);
+  if(/%$/.test(set)){ const pct=Number(set.slice(0,-1)); return {pct,sum:Math.round(price*pct/100),own:true}; }
+  if(set) return {pct:null,sum:Number(set),own:true};
+  const pct=Number(p.cashback)||0; return pct>0?{pct,sum:Math.round(price*pct/100),own:false}:null; };
+const pctText=x=>String(x).replace('.',',')+'%';
 const siteOf=p=>SITE_NAMES[p.site]?p.site:'uzum';
 const pid=p=>siteOf(p)+':'+p.product_id+':'+(p.sku_id||0);
 // Размеры товара Wildberries: в приложении приходят строкой, в расширении — списком
@@ -169,15 +186,15 @@ const go=u=>{ if(HAS('openUrl')) Android.openUrl(u); else location.href=u; };
 const appBuild=()=>{ const m=String((S&&S.info&&S.info.app)||'').match(/(\d+)$/); return m?Number(m[1]):0; };
 const outdated=()=>!!window.Android&&!EXT&&appBuild()>0&&appBuild()<NEED_APP;
 const SORTS={new:'Сначала новые',changed:'Недавно менялись',drop:'Сильнее подешевели',price:'Сначала дешёвые',name:'По названию'};
-let sort=store.get('sort','new'), query='', targetEdit=false, sizePick=null; if(!SORTS[sort]) sort='new';
+let sort=store.get('sort','new'), query='', targetEdit=false, sizePick=null, cbEdit=false; if(!SORTS[sort]) sort='new';
 const TITLES={products:'Товары',changes:'Изменения',favorites:'Избранное',settings:'Настройки'};
 let tab='products', filter='all', open={}, hist={}, onlyChanges={}, lastKey='', S=null;
 let fav=null, favMsg='', favSel={}, favBusy=false, shop='all', diag='', waiters={}, menuId=null, menuSure=false;
 let seenTs=Number(store.get('seenTs',0));
 // Аккаунт Uzum: state 'in' — вход выполнен (приложение прочитало ваше избранное), '' — не выполнен или неизвестно
-let acct={uzum:'',ozon:'',wb:''}, loginOpened='', acctMenu=false, outBusy=false;
+let acct={uzum:'',ozon:'',wb:'',mc:''}, loginOpened='', acctMenu=false, outBusy=false;
 const CANOUT=!!(window.Android&&typeof Android.logoutUzum==='function');
-try{ const a=JSON.parse(store.get('acct','{}')); ['uzum','ozon','wb'].forEach(k=>{ if(a[k]==='in'||a[k]==='out') acct[k]=a[k]; }); if(a.state==='in') acct.uzum='in'; }catch(e){}
+try{ const a=JSON.parse(store.get('acct','{}')); Object.keys(SITE_NAMES).forEach(k=>{ if(a[k]==='in'||a[k]==='out') acct[k]=a[k]; }); if(a.state==='in') acct.uzum='in'; }catch(e){}
 
 window.onPageResult=(token,result)=>{ const w=waiters[token]; delete waiters[token]; if(w) w(result); };
 function runOnPage(url,fn,cb){ if(HAS('runFn')){ Android.runFn(url,fn,cb); return; }
@@ -281,12 +298,37 @@ function favWb(){
       price:txt(box.querySelector('ins')), image:img?(img.currentSrc||img.getAttribute('src')||'').split('?')[0]:''}; });
   return JSON.stringify({items, who:known||here?'in':''});
 }
-const FAV={uzum:{url:'https://uzum.uz/ru/wishes',fn:favScript},ozon:{url:'https://www.ozon.uz/my/favorites',fn:favOzon},wb:{url:'https://www.wildberries.uz/lk/favorites',fn:favWb}};
-const favSites=()=>MULTI?['uzum','ozon','wb']:['uzum'];
+// Избранное MCosmetic: отдельной страницы у сайта нет — список берём тем же запросом, что и сам сайт,
+// с вашим входом на сайте. Запрос идёт только на сервер магазина; ключ входа никуда не сохраняется.
+function favMc(){
+  const W=window; W.__t0=W.__t0||Date.now(); const el=(Date.now()-W.__t0)/1000;
+  if(document.readyState!=='complete'&&el<15) return null;
+  if(el<2) return null;
+  let us=null; try{ us=JSON.parse(localStorage.getItem('UserStore')||'null'); }catch(e){}
+  if(!us||!us.isAuthorized||!us.token) return JSON.stringify({items:[],who:'out'});
+  if(!W.__fm){ const z=W.__fm={done:false,items:[],ok:false};
+    const wh=(document.documentElement.innerHTML.match(/"serverWarehouse":"([A-Z0-9_]{1,20})"/)||[])[1]||'ECOSM';
+    const sum=v=>Number(v)>0?String(Math.round(Number(v)/100)).replace(/\B(?=(\d{3})+(?!\d))/g,' ')+' сум':'';
+    (async()=>{ try{ const seen={};
+      for(let page=1;page<=20;page++){
+        const r=await fetch('https://api2.jiffygrocery.co.uk/catalog/v1/favourites?warehouseCode='+encodeURIComponent(wh)+'&page[current]='+page+'&page[size]=50',{headers:{Authorization:'Bearer '+us.token}});
+        if(!r.ok) break; const j=await r.json(); const list=Array.isArray(j.data)?j.data:Array.isArray(j.items)?j.items:[];
+        for(const x0 of list){ const x=(x0&&x0.product)||x0||{}; const slug=String(x.slug||''); if(!/^[a-z0-9-]+-\d+$/i.test(slug)||seen[slug]) continue; seen[slug]=1;
+          const o=(Array.isArray(x.offers)&&x.offers[0])||x, im=((o.images||x.images||[])[0])||{};
+          z.items.push({url:'https://www.mcosmetic.uz/p/'+slug, title:String(x.name||o.name||''), price:sum(o.discountPrice||o.price||x.discountPrice||x.price)||(o.stocks&&!o.stocks.some(s=>s.stock>0)?'нет в наличии':''), image:String(im.thumb||im.url||'')}); }
+        z.ok=true; const pg=j.pagination||{}; if(!list.length||page*(Number(pg.size)||50)>=(Number(pg.total)||0)) break; }
+    }catch(e){} z.done=true; })(); }
+  if(!W.__fm.done&&el<30) return null;
+  if(!W.__fm.ok) return JSON.stringify({items:[],who:'in',error:true});
+  return JSON.stringify({items:W.__fm.items,who:'in'});
+}
+const FAV={uzum:{url:'https://uzum.uz/ru/wishes',fn:favScript},ozon:{url:'https://www.ozon.uz/my/favorites',fn:favOzon},wb:{url:'https://www.wildberries.uz/lk/favorites',fn:favWb},mc:{url:'https://www.mcosmetic.uz/',fn:favMc}};
+const favSites=()=>SUPPORTED.slice();
 // Ключ товара по ссылке из избранного — чтобы отметить те, что уже отслеживаются
 const favKey=f=>{ const u=f.url; let m;
   if(f.site==='ozon'){ m=u.match(/\/product\/(?:[^\/?#]*-)?(\d+)\/?(?:[?#]|$)/); return m?'ozon:'+m[1]+':0':u; }
   if(f.site==='wb'){ m=u.match(/\/catalog\/(\d+)\/detail/); const z=u.match(/[?&]size=(\d+)/); return m?'wb:'+m[1]+':'+(z?z[1]:'0'):u; }
+  if(f.site==='mc'){ m=u.match(/\/p\/(?:[^\/?#]*-)?(\d+)\/?(?:[?#]|$)/); const z=u.match(/[?&]sku=(\d+)/); return m?'mc:'+m[1]+':'+(z?z[1]:'0'):u; }
   return pkey(u); };
 const shopChips=(counts,total)=>{ const used=Object.keys(SITE_NAMES).filter(k=>counts[k]); if(used.length<2) return '';
   return '<div class="chips">'+[['all','Все магазины · '+total]].concat(used.map(k=>[k,SITE_NAMES[k]+' · '+counts[k]])).map(x=>`<button type="button" class="chip ${shop===x[0]?'on':''}" data-shop="${x[0]}">${x[1]}</button>`).join('')+'</div>'; };
@@ -362,7 +404,7 @@ function sorted(list){
   return a;
 }
 const matches=p=>{ const q=query.trim().toLowerCase(); return !q||[p.name,p.seller,p.variant,SITE_NAMES[siteOf(p)]].some(t=>String(t||'').toLowerCase().indexOf(q)>=0); };
-const newVer=()=>outdated()?`<div class="card newver"><b>Вышла новая версия приложения</b><p class="note" style="margin:6px 0 8px">Без неё часть функций не работает: товары с Ozon и Wildberries, резервная копия, желаемая цена. Ставится поверх, список товаров сохранится.</p><a href="${APK}">Скачать новую версию</a></div>`:'';
+const newVer=()=>outdated()?`<div class="card newver"><b>Вышла новая версия приложения</b><p class="note" style="margin:6px 0 8px">Без неё часть функций не работает: товары с MCosmetic, кешбэк, товары с Ozon и Wildberries. Ставится поверх, список товаров сохранится.</p><a href="${APK}">Скачать новую версию</a></div>`:'';
 const cheaper=p=>p.last_ok&&p.first_price&&p.price&&p.price<p.first_price;
 const inStock=p=>p.last_ok&&p.in_stock&&p.status!=='not_found';
 const outOf=p=>p.last_ok&&(!p.in_stock||p.status==='not_found');
@@ -375,7 +417,7 @@ function card(p){
     tags.push(`<span class="tag ${pc<0?'good':'bad'}">${pc<0?'↓':'↑'} ${Math.abs(pc).toFixed(1).replace('.',',')}% с начала</span>`); }
   const site=siteOf(p);
   if(site==='uzum'&&p.variant&&!p.sku_id) tags.push('<span class="tag warn">вариант не закреплён</span>');
-  if(site==='wb'&&!p.sku_id&&sizesOf(p).length>1) tags.push('<span class="tag warn">размер не выбран</span>');
+  if(VARS[site]&&!p.sku_id&&sizesOf(p).length>1) tags.push(`<span class="tag warn">${VARS[site].tag}</span>`);
   if(p.target_price){ const b=best(p); tags.push(has&&p.in_stock&&b&&b<=p.target_price?`<span class="tag good">не выше желаемой ${money(p.target_price)}</span>`:`<span class="tag">жду ${money(p.target_price)}</span>`); }
   const sub=SITE_NAMES[site]+(p.seller?' · '+esc(p.seller):'');
   return `<article class="card"><div class="top" data-open="${p.id}">
@@ -386,6 +428,7 @@ function card(p){
   ${sub?`<div class="sub">${sub}</div>`:''}
   ${has?`<div class="prow"><div class="pcol"><div class="price">${money(p.price)}</div>
   ${p.card_price?`<div class="cardp">${money(p.card_price)} ${CARD_LABEL[site]}</div>`:''}
+  ${(()=>{ const c=cbOf(p); return c?`<div class="cb">Кешбэк ${c.pct!=null?pctText(c.pct)+' · ':''}${money(c.sum)}${c.own?' · указан вами':''}</div>`:''; })()}
   ${p.old_price?`<div class="oldl"><s>${num(p.old_price)}</s> · скидка ${Math.round((1-p.price/p.old_price)*100)}%</div>`:''}</div>${spark(hist[p.id]&&hist[p.id].checks)}</div>`:''}
   </div></div>
   <div class="tags">${tags.join('')}${has?`<span class="when">проверено ${when(p.last_ok)}</span>`:''}</div>
@@ -429,7 +472,7 @@ function viewFavorites(){
     body='<div class="card">'+list.map(f=>{ const got=have[favKey(f)];
       return `<label class="feed">${/^https:\/\//.test(f.image||'')?`<img src="${esc(f.image)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:'<div class="ph"></div>'}<span class="ft"><b>${esc(f.title||f.url)}</b><small>${[SITE_NAMES[f.site],got?'уже отслеживается':esc(f.price)].filter(Boolean).join(' · ')}</small></span><input type="checkbox" data-fav="${esc(f.url)}" ${got?'disabled checked':(favSel[f.url]?'checked':'')}></label>`; }).join('')+'</div>'
       +`<div class="bar"><button class="primary" type="button" id="favadd" ${total?'':'disabled'}>Применить${total?' · '+total:''}</button></div>`; }
-  return `<p class="note">Товары из вашего избранного${MULTI?' на Uzum, Ozon и Wildberries':' на Uzum'}. Отметьте те, за которыми нужно следить, и нажмите «Применить». Цвет здесь не выбирается: чтобы следить за конкретным вариантом, добавьте ссылку на него через «+».</p>
+  return `<p class="note">Товары из вашего избранного на ${siteList()}. Отметьте те, за которыми нужно следить, и нажмите «Применить». Цвет здесь не выбирается: чтобы следить за конкретным вариантом, добавьте ссылку на него через «+».</p>
   <div class="acts" style="margin:0 0 12px"><button class="ghost" type="button" id="favload" ${favBusy?'disabled':''}>${favBusy?'Читаю…':fav?'Обновить список':'Показать избранное'}</button>${pick}</div>
   ${chips}${favMsg?`<p class="note">${esc(favMsg)}</p>`:''}${body}`;
 }
@@ -437,7 +480,7 @@ function viewFavorites(){
 function viewSettings(){
   const i=S.info||{};
   const row=(title,sub,ok,key,btn)=>`<div class="setrow"><div>${title}<small>${sub}</small></div>${ok?'<span class="ok">включено</span>':`<button class="ghost" type="button" data-s="${key}">${btn}</button>`}</div>`;
-  const perms=EXT?`<div class="card"><h2>Как работает расширение</h2><p class="note">Цены проверяются каждые полчаса, пока открыт браузер. Для проверки расширение ненадолго открывает страницы товаров в свёрнутом окне и само его закрывает. Цены видны так же, как вам на сайте: если вы вошли на Uzum, Ozon или Wildberries в этом браузере, они будут личными.</p>
+  const perms=EXT?`<div class="card"><h2>Как работает расширение</h2><p class="note">Цены проверяются каждые полчаса, пока открыт браузер. Для проверки расширение ненадолго открывает страницы товаров в свёрнутом окне и само его закрывает. Цены видны так же, как вам на сайте: если вы вошли на ${siteListOr()} в этом браузере, они будут личными.</p>
   <div class="setrow"><div>Открывать в фоновой вкладке<small>Включите, если свёрнутое окно мешает или проверки не проходят</small></div><input type="checkbox" id="tabmode" aria-label="Открывать страницы в фоновой вкладке" ${i.tab_mode?'checked':''}></div>
   <div class="acts">${HAS('testNotify')?'<button class="ghost" type="button" id="testn">Проверить уведомление</button>':''}${HAS('openTab')&&!document.documentElement.classList.contains('tab')?'<button class="ghost" type="button" id="astab">Открыть в отдельной вкладке</button>':''}</div>
   <p class="note" style="margin-top:10px">Уведомление приходит, только когда что-то изменилось: цена, наличие или количество. Новые изменения также видны числом на значке расширения. Если проверочное уведомление не появилось, разрешите уведомления для браузера в системе (Windows: Параметры → Система → Уведомления; macOS: Системные настройки → Уведомления) и выключите режим «Не беспокоить».</p></div>`
@@ -448,7 +491,7 @@ function viewSettings(){
   return `${newVer()}${perms}
   <div class="card"><h2>Уведомления</h2>
   <div class="setrow"><div>Сообщать об изменении количества<small>Если выключить — только цена и наличие</small></div><input type="checkbox" id="ns" aria-label="Сообщать об изменении количества" ${i.notify_stock?'checked':''}></div></div>
-  <div class="card"><h2>${EXT?'Сайты':'Личные кабинеты'}</h2><p class="note">${EXT?'Расширение пользуется вашим входом на сайтах в этом браузере. Войдите на Uzum, Ozon или Wildberries — и монитор увидит ваши личные цены.':'После входа монитор видит ваши личные цены'+(MULTI?' на Uzum, Ozon и Wildberries':'')+' и избранное Uzum. Номер и код вы вводите на самом сайте — приложение их не видит.'}</p>
+  <div class="card"><h2>${EXT?'Сайты':'Личные кабинеты'}</h2><p class="note">${EXT?'Расширение пользуется вашим входом на сайтах в этом браузере. Войдите на '+siteListOr()+' — и монитор увидит ваши личные цены и избранное.':'После входа монитор видит ваши личные цены и избранное на '+siteList()+'. Номер и код вы вводите на самом сайте — приложение их не видит.'}</p>
   ${favSites().some(k=>acct[k])?`<p class="note">${favSites().filter(k=>acct[k]).map(k=>`<span class="${acct[k]==='in'?'ok':'mut'}">${SITE_NAMES[k]}${acctNote(k)}</span>`).join('<br>')}</p>`:''}
   <div class="acts"><button class="ghost" type="button" id="login2">${EXT?'Открыть сайт':'Войти или выйти'}</button>${CAN&&S.products.some(p=>siteOf(p)==='uzum')?'<button class="ghost" type="button" id="diagb">Диагностика</button>':''}</div>
   ${diag?`<textarea readonly aria-label="Данные диагностики">${esc(diag)}</textarea><div class="acts"><button class="ghost" type="button" id="diagcopy">Скопировать</button><button class="ghost" type="button" id="diagclose">Закрыть</button></div>`:''}</div>
@@ -486,7 +529,7 @@ function loadFav(only,done){ if(favBusy) return; favBusy=true; favMsg='';
     const site=sites[i];
     runOnPage(FAV[site].url,FAV[site].fn,r=>{ let d=null; try{ d=r&&JSON.parse(r); }catch(e){}
       const name=SITE_NAMES[site];
-      if(!d) notes.push(name+': не удалось открыть избранное.');
+      if(!d||d.error) notes.push(name+': не удалось прочитать избранное.');
       else { let who=d.who||''; if(site==='uzum'&&!who&&d.items.length) who='in';
         setAcct(site,who);
         if(who==='out') notes.push(name+': вход не выполнен.');
@@ -495,44 +538,55 @@ function loadFav(only,done){ if(favBusy) return; favBusy=true; favMsg='';
       refresh(true); step(i+1); }); };
   step(0); }
 function openAcct(){ acctMenu=true; menuId=null;
-  const item=site=>site==='uzum'||MULTI?`<button class="item" type="button" data-act="acc-${site}">${SITE_NAMES[site]}<span class="${acct[site]==='in'?'ok':'mut'}">${acctNote(site)}</span></button>`:'';
+  const item=site=>SUPPORTED.indexOf(site)>=0?`<button class="item" type="button" data-act="acc-${site}">${SITE_NAMES[site]}<span class="${acct[site]==='in'?'ok':'mut'}">${acctNote(site)}</span></button>`:'';
   $('#menubody').innerHTML=`<h2>${EXT?'Сайты':'Личные кабинеты'}</h2>
   <p class="note">${EXT?'Расширение видит цены так же, как вы в этом браузере. Нажмите на сайт, чтобы открыть его и войти, — цены станут личными.':'Нажмите на сайт и войдите в свой кабинет — монитор будет видеть ваши личные цены и избранное. Номер и код вы вводите на самом сайте, приложение их не видит.'}</p>
-  ${item('uzum')}${item('ozon')}${item('wb')}
-  ${!MULTI&&!EXT?`<a class="item" href="${APK}">Ozon и Wildberries — в новой версии приложения</a>`:''}
+  ${Object.keys(SITE_NAMES).map(item).join('')}
+  ${!EXT&&missing().length?`<a class="item" href="${APK}">${missing().join(', ')} — в новой версии приложения</a>`:''}
   <button class="item" type="button" data-act="acc-check" ${favBusy?'disabled':''}>${favBusy?'Проверяю вход…':'Проверить вход'}</button>
   ${!EXT&&CANOUT?'<button class="item danger" type="button" data-act="logout">Выйти из всех кабинетов</button>':''}`;
   $('#menu').hidden=false; }
 // Выход: стираем сохранённые данные каждого сайта, затем cookie
 function logout(){ if(!CANOUT||outBusy) return; outBusy=true;
-  const sites=MULTI?['uzum','ozon','wb']:['uzum'];
+  const sites=SUPPORTED.slice();
   const step=i=>{ if(i<sites.length){ runOnPage(LOGIN[sites[i]],wipeScript,()=>step(i+1)); return; }
-    Android.logoutUzum(); outBusy=false; ['uzum','ozon','wb'].forEach(k=>setAcct(k,'out')); fav=null; favSel={}; favMsg='Вы вышли из личных кабинетов.'; refresh(true); };
+    Android.logoutUzum(); outBusy=false; SUPPORTED.forEach(k=>setAcct(k,'out')); fav=null; favSel={}; favMsg='Вы вышли из личных кабинетов.'; refresh(true); };
   step(0); }
-function openMenu(id){ acctMenu=false; targetEdit=false; sizePick=null; menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
+function openMenu(id){ acctMenu=false; targetEdit=false; sizePick=null; cbEdit=false; menuId=id; menuSure=false; drawMenu(); $('#menu').hidden=false; }
 function drawTarget(p){
   $('#menubody').innerHTML=`<h2>Желаемая цена</h2><p class="note">${esc(p.name||'Товар')}${p.variant?' · '+esc(p.variant):''}. Сейчас ${money(best(p))}. Уведомление о цене придёт, только когда она станет не выше указанной. О наличии приложение сообщает как обычно.</p>
   <input id="tp" type="text" inputmode="numeric" placeholder="Цена в сумах" aria-label="Желаемая цена в сумах" autocomplete="off" value="${p.target_price?num(p.target_price):''}">
   <div class="msg" id="tmsg"></div>
   <div class="acts"><button class="primary" type="button" data-act="tsave">Сохранить</button>${p.target_price?'<button class="ghost" type="button" data-act="tclear">Убрать</button>':''}<button class="ghost" type="button" data-act="tcancel">Отмена</button></div>`;
   $('#tp').focus(); }
-// Wildberries: у размеров бывают разные цены и остатки — каждый выбранный размер становится отдельным товаром
+// Размеры Wildberries, оттенки и объёмы MCosmetic: у вариантов бывают разные цены и остатки —
+// каждый выбранный вариант становится отдельным товаром
+function drawCashback(p){
+  const site=Number(p.cashback)||0, c=cbOf(p);
+  $('#menubody').innerHTML=`<h2>Кешбэк</h2><p class="note">${esc(p.name||'Товар')}. Укажите процент, например «10%», или сумму в сумах, например «10 000». Монитор покажет, сколько вернётся с текущей цены.${site?` Сайт показывает кешбэк ${site}% — его можно не указывать.`:''}</p>
+  <input id="cbv" type="text" inputmode="decimal" placeholder="10% или 10 000" aria-label="Кешбэк: процент или сумма" autocomplete="off" value="${esc(cbSet(p.cashback_set).replace(/^(\d+)$/,m=>num(Number(m))))}">
+  <div class="msg" id="cbmsg">${c?`Сейчас: ${c.pct!=null?pctText(c.pct)+' — ':''}${money(c.sum)}${c.own?'':' (с сайта)'}`:''}</div>
+  <div class="acts"><button class="primary" type="button" data-act="cbsave">Сохранить</button>${cbSet(p.cashback_set)?'<button class="ghost" type="button" data-act="cbclear">Убрать</button>':''}<button class="ghost" type="button" data-act="cbcancel">Отмена</button></div>`;
+  $('#cbv').focus(); }
 function drawSizes(p){
+  const site=siteOf(p), V=VARS[site];
   const have={}; S.products.forEach(x=>have[pid(x)]=1);
   const list=sizesOf(p), n=Object.keys(sizePick.sel).filter(k=>sizePick.sel[k]).length;
-  $('#menubody').innerHTML=`<h2>Какой размер отслеживать</h2><p class="note">${esc(p.name||'Товар')}. Каждый отмеченный размер станет отдельным товаром в списке.</p>
-  <div class="vlist">${list.map((v,i)=>{ const got=have['wb:'+p.product_id+':'+v.id];
-    return `<label class="feed"><span class="ft"><b>${esc(v.name||'Размер '+v.id)}</b><small>${[v.price?money(v.price):'',v.qty>0?v.qty+' шт':'нет в наличии',got?'уже отслеживается':''].filter(Boolean).join(' · ')}</small></span><input type="checkbox" data-size="${i}" ${got?'disabled checked':(sizePick.sel[i]?'checked':'')}></label>`; }).join('')}</div>
-  ${p.sku_id?'':`<label class="toggle"><input type="checkbox" id="srep" ${sizePick.replace?'checked':''}><span>Убрать текущую карточку без размера (её история удалится)</span></label>`}
+  $('#menubody').innerHTML=`<h2>${V.title}</h2><p class="note">${esc(p.name||'Товар')}. Каждый отмеченный вариант станет отдельным товаром в списке.${site==='mc'?' Цену каждого варианта монитор узнает при первой проверке.':''}</p>
+  <div class="vlist">${list.map((v,i)=>{ const got=have[site+':'+p.product_id+':'+v.id];
+    return `<label class="feed"><span class="ft"><b>${esc(v.name||V.one+' '+v.id)}</b><small>${[v.price?money(v.price):'',v.qty>0?v.qty+' шт':'нет в наличии',got?'уже отслеживается':''].filter(Boolean).join(' · ')}</small></span><input type="checkbox" data-size="${i}" ${got?'disabled checked':(sizePick.sel[i]?'checked':'')}></label>`; }).join('')}</div>
+  ${p.sku_id?'':`<label class="toggle"><input type="checkbox" id="srep" ${sizePick.replace?'checked':''}><span>Убрать текущую карточку ${V.rest} (её история удалится)</span></label>`}
   <div class="acts"><button class="primary" type="button" data-act="sapply" ${n?'':'disabled'}>Применить${n?' · '+n:''}</button><button class="ghost" type="button" data-act="scancel">Отмена</button></div>`; }
 function drawMenu(){ const p=S.products.find(x=>x.id===menuId); if(!p){ $('#menu').hidden=true; return; }
   if(targetEdit){ drawTarget(p); return; }
   if(sizePick){ drawSizes(p); return; }
+  if(cbEdit){ drawCashback(p); return; }
   $('#menubody').innerHTML=`<h2>${esc(p.name||'Товар')}</h2>
   <button class="item" type="button" data-act="check">Проверить сейчас</button>
   ${HAS('setTarget')?`<button class="item" type="button" data-act="target">Желаемая цена${p.target_price?': '+money(p.target_price):''}</button>`:''}
   <button class="item" type="button" data-act="hist">${open[p.id]?'Скрыть историю':'История и график'}</button>
-  ${sizesOf(p).length>1?'<button class="item" type="button" data-act="size">Выбрать размер</button>':''}
+  ${HAS('setCashback')?`<button class="item" type="button" data-act="cb">Кешбэк${(()=>{ const c=cbOf(p); return c?': '+(c.pct!=null?pctText(c.pct):money(c.sum)):''; })()}</button>`:''}
+  ${VARS[siteOf(p)]&&sizesOf(p).length>1?`<button class="item" type="button" data-act="size">${VARS[siteOf(p)].item}</button>`:''}
   <button class="item" type="button" data-act="site">Открыть на ${SITE_NAMES[siteOf(p)]}</button>
   <button class="item danger" type="button" data-act="del">${menuSure?'Точно удалить вместе с историей?':'Удалить'}</button>`; }
 $('#login').addEventListener('click',openAcct);
@@ -541,8 +595,8 @@ $('#nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!
 $('#fab').addEventListener('click',()=>{ $('#msg').textContent=''; $('#addsheet').hidden=false; $('#u').focus();
   // В расширении подставляем ссылку на товар, открытый в текущей вкладке браузера
   if(HAS('currentUrl')) Android.currentUrl(u=>{ if(u&&!$('#u').value){ $('#u').value=u; $('#u').select(); } }); });
-if(EXT) $('#addhint').textContent='Подходят ссылки с Uzum, Ozon и Wildberries. Откройте товар на сайте и нажмите значок расширения, затем «+» — ссылка подставится сама.';
-else if(MULTI) $('#addhint').textContent='Подходят ссылки с Uzum, Ozon и Wildberries. Ещё можно нажать «Поделиться» на странице товара и выбрать «Монитор цен». Товары Uzum можно отметить во вкладке «Избранное».';
+if(EXT) $('#addhint').textContent='Подходят ссылки с '+siteList()+'. Откройте товар на сайте и нажмите значок расширения, затем «+» — ссылка подставится сама.';
+else if(MULTI) $('#addhint').textContent='Подходят ссылки с '+siteList()+'. Ещё можно нажать «Поделиться» на странице товара и выбрать «Монитор цен». Товары можно отметить и во вкладке «Избранное».';
 $('#addclose').addEventListener('click',()=>{ $('#addsheet').hidden=true; });
 $('#addsheet').addEventListener('click',e=>{ if(e.target.id==='addsheet') $('#addsheet').hidden=true; });
 $('#menu').addEventListener('click',e=>{ if(e.target.id==='menu'){ $('#menu').hidden=true; return; }
@@ -552,9 +606,14 @@ $('#menu').addEventListener('click',e=>{ if(e.target.id==='menu'){ $('#menu').hi
   const p=S.products.find(x=>x.id===menuId); if(!p) return;
   if(a==='del'&&!menuSure){ menuSure=true; drawMenu(); return; }
   if(a==='target'){ targetEdit=true; drawMenu(); return; }
+  if(a==='cb'){ cbEdit=true; drawMenu(); return; }
+  if(a==='cbsave'){ const raw=$('#cbv').value.trim(), v=cbSet(/%/.test(raw)?raw:raw.replace(/[^\d]/g,''));
+    if(!v){ $('#cbmsg').textContent='Введите процент, например 10%, или сумму, например 10 000.'; return; }
+    call('setCashback',p.id,v); }
+  if(a==='cbclear') call('setCashback',p.id,'');
   if(a==='size'){ sizePick={sel:{},replace:!p.sku_id}; drawMenu(); return; }
   if(a==='sapply'&&sizePick){ const base=p.url.split('?')[0], list=sizesOf(p); let n=0;
-    Object.keys(sizePick.sel).forEach(i=>{ if(sizePick.sel[i]&&list[i]){ const r=call('addProduct',base+'?size='+list[i].id); if(r&&!r.error) n++; } });
+    Object.keys(sizePick.sel).forEach(i=>{ if(sizePick.sel[i]&&list[i]){ const r=call('addProduct',base+'?'+VARS[siteOf(p)].param+'='+list[i].id); if(r&&!r.error) n++; } });
     if(n&&sizePick.replace&&!p.sku_id) call('deleteProduct',p.id); }
   if(a==='tsave'){ const v=Number($('#tp').value.replace(/[^\d]/g,''));
     if(!v){ $('#tmsg').textContent='Введите цену числом, например 150 000.'; return; }

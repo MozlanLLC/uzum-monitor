@@ -38,7 +38,7 @@ public class Store extends SQLiteOpenHelper {
     private final Context ctx;
 
     private Store(Context c) {
-        super(c, "monitor.db", null, 4);
+        super(c, "monitor.db", null, 5);
         ctx = c;
     }
 
@@ -53,7 +53,7 @@ public class Store extends SQLiteOpenHelper {
                 + "image TEXT DEFAULT '', seller TEXT DEFAULT '', variant TEXT DEFAULT '', price INTEGER, "
                 + "old_price INTEGER, card_price INTEGER, in_stock INTEGER, stock INTEGER, added_at INTEGER, last_try INTEGER, "
                 + "last_ok INTEGER, status TEXT DEFAULT 'new', error TEXT DEFAULT '', warning TEXT DEFAULT '', "
-                + "target_price INTEGER, site TEXT NOT NULL DEFAULT 'uzum', sizes TEXT)");
+                + "target_price INTEGER, site TEXT NOT NULL DEFAULT 'uzum', sizes TEXT, cashback INTEGER, cashback_set TEXT)");
         db.execSQL("CREATE TABLE checks(id INTEGER PRIMARY KEY AUTOINCREMENT, product INTEGER NOT NULL, "
                 + "ts INTEGER NOT NULL, price INTEGER, old_price INTEGER, card_price INTEGER, in_stock INTEGER, stock INTEGER, "
                 + "event TEXT DEFAULT '')");
@@ -68,6 +68,11 @@ public class Store extends SQLiteOpenHelper {
         }
         if (oldVersion < 3) {
             db.execSQL("ALTER TABLE products ADD COLUMN target_price INTEGER");
+        }
+        if (oldVersion < 5) {
+            // кешбэк: с сайта (процент) и указанный вручную («10%» или сумма)
+            db.execSQL("ALTER TABLE products ADD COLUMN cashback INTEGER");
+            db.execSQL("ALTER TABLE products ADD COLUMN cashback_set TEXT");
         }
         if (oldVersion < 4) {
             // другие сайты (Ozon, Wildberries) и размеры товара Wildberries
@@ -109,6 +114,30 @@ public class Store extends SQLiteOpenHelper {
         ContentValues v = new ContentValues();
         if (price > 0) v.put("target_price", price); else v.putNull("target_price");
         getWritableDatabase().update("products", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    /** Кешбэк, указанный вручную: «10%» — процент, «10000» — сумма в сумах; пусто — убрать. */
+    public void setCashback(long id, String value) {
+        ContentValues v = new ContentValues();
+        String set = cashbackSet(value);
+        if (set.isEmpty()) v.putNull("cashback_set"); else v.put("cashback_set", set);
+        getWritableDatabase().update("products", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    /** Приводит кешбэк к виду «10%», «7.5%» или «10000». Неверное значение — пустая строка. */
+    public static String cashbackSet(String value) {
+        String t = value == null ? "" : value.replaceAll("[\\s\\u00a0]", "").replace(',', '.');
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(\\d{1,2}(?:\\.\\d)?)%$").matcher(t);
+        if (m.matches()) {
+            double pct = Double.parseDouble(m.group(1));
+            if (pct > 0) return (pct == Math.floor(pct) ? String.valueOf((long) pct) : String.valueOf(pct)) + "%";
+            return "";
+        }
+        if (t.matches("^\\d{1,9}$")) {
+            long sum = Long.parseLong(t);
+            return sum > 0 ? String.valueOf(sum) : "";
+        }
+        return "";
     }
 
     public List<Long> allIds() {
@@ -217,10 +246,14 @@ public class Store extends SQLiteOpenHelper {
         boolean inStock = res.optBoolean("in_stock", false);
         long stock = res.isNull("stock") ? -1 : res.optLong("stock", -1);
 
-        long target = 0;
-        try (Cursor c = db.rawQuery("SELECT target_price FROM products WHERE id=?", a)) {
-            if (c.moveToFirst() && !c.isNull(0)) target = c.getLong(0);
+        long target = 0, prevCb = -1;
+        try (Cursor c = db.rawQuery("SELECT target_price, cashback FROM products WHERE id=?", a)) {
+            if (c.moveToFirst()) {
+                if (!c.isNull(0)) target = c.getLong(0);
+                if (!c.isNull(1)) prevCb = c.getLong(1);
+            }
         }
+        long cb = Math.max(0, Math.min(99, res.optLong("cashback", 0)));
         long best = best(price, cardPrice), prevBest = best(prevPrice, prevCard);
         boolean reached = target > 0 && inStock && best > 0 && best <= target;
         boolean prevReached = target > 0 && prevInStock && prevBest > 0 && prevBest <= target;
@@ -251,6 +284,13 @@ public class Store extends SQLiteOpenHelper {
             }
             if (reached && !prevReached) {
                 String s = "Цена не выше желаемой (" + money(target) + ")";
+                ev.add(s);
+                nt.add(s);
+            }
+            // кешбэк, который показывает сайт (MCosmetic)
+            if (prevCb >= 0 && prevCb != cb) {
+                String s = cb > 0 ? (prevCb > 0 ? "Кешбэк: " + prevCb + "% → " + cb + "%" : "Появился кешбэк " + cb + "%")
+                        : "Кешбэк " + prevCb + "% больше не действует";
                 ev.add(s);
                 nt.add(s);
             }
@@ -292,6 +332,7 @@ public class Store extends SQLiteOpenHelper {
         v.put("warning", res.optString("warning"));
         JSONArray sizes = res.optJSONArray("sizes");
         if (sizes != null && sizes.length() > 1) v.put("sizes", sizes.toString()); else v.putNull("sizes");
+        v.put("cashback", cb);
         db.update("products", v, "id=?", a);
         return ch;
     }
@@ -364,6 +405,9 @@ public class Store extends SQLiteOpenHelper {
                 copyLong(v, p, "last_try");
                 copyLong(v, p, "last_ok");
                 copyLong(v, p, "target_price");
+                copyLong(v, p, "cashback");
+                String cbSet = cashbackSet(text(p, "cashback_set", 20));
+                if (cbSet.isEmpty()) v.putNull("cashback_set"); else v.put("cashback_set", cbSet);
                 String status = text(p, "status", 20);
                 v.put("status", status.matches("new|ok|error|not_found") ? status : "new");
                 v.put("error", text(p, "error", 500));

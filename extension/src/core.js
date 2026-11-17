@@ -49,10 +49,24 @@ const Core = (() => {
         return { url: skuId ? base + '?size=' + skuId : base, productId: Number(m[1]), skuId };
       },
     },
+    mc: {
+      name: 'MCosmetic', extract: 'extract-mc.js',
+      image: /^https:\/\/(?:s3\.eu-west-2\.amazonaws\.com\/catalog\.jiffy-software\.com|images\.thenativecommerce\.com)\//,
+      path: /\/p\/(?:[^\/?#]*-)?(\d+)\/?(?:[?#].*)?$/,
+      hint: 'mcosmetic.uz/p/название-12345',
+      clean(url, m) {
+        // оттенок или объём — ?sku=… в ссылке; без него сайт сам выбирает вариант, и он может смениться
+        const s = url.match(/[?&]sku=(\d+)/), skuId = s ? Number(s[1]) : 0;
+        const q = url.indexOf('?');
+        let path = (q >= 0 ? url.slice(0, q) : url).replace(/^https?:\/\/(?:www\.)?mcosmetic\.uz/i, 'https://www.mcosmetic.uz');
+        while (path.endsWith('/')) path = path.slice(0, -1);
+        return { url: skuId ? path + '?sku=' + skuId : path, productId: Number(m[1]), skuId };
+      },
+    },
   };
-  const HOSTS = { 'uzum.uz': 'uzum', 'ozon.uz': 'ozon', 'wildberries.uz': 'wb' };
-  const LINK = /https?:\/\/(?:www\.)?(uzum\.uz|ozon\.uz|wildberries\.uz)\/[^\s"'<>]+/i;
-  const BARE = /(?:^|\s)((?:www\.)?(uzum\.uz|ozon\.uz|wildberries\.uz)\/[^\s"'<>]+)/i;
+  const HOSTS = { 'uzum.uz': 'uzum', 'ozon.uz': 'ozon', 'wildberries.uz': 'wb', 'mcosmetic.uz': 'mc' };
+  const LINK = /https?:\/\/(?:www\.)?(uzum\.uz|ozon\.uz|wildberries\.uz|mcosmetic\.uz)\/[^\s"'<>]+/i;
+  const BARE = /(?:^|\s)((?:www\.)?(uzum\.uz|ozon\.uz|wildberries\.uz|mcosmetic\.uz)\/[^\s"'<>]+)/i;
   const siteOf = p => (p && SITES[p.site] ? p.site : 'uzum');
 
   /** Находит ссылку на товар в тексте. Возвращает {site, url, productId, skuId}. */
@@ -65,7 +79,7 @@ const Core = (() => {
       url = m[0]; host = m[1];
     } else {
       const b = t.match(BARE);
-      if (!b) throw new UserError('Это не ссылка на Uzum, Ozon или Wildberries.');
+      if (!b) throw new UserError('Это не ссылка на Uzum, Ozon, Wildberries или MCosmetic.');
       url = 'https://' + b[1]; host = b[2];
     }
     const hash = url.indexOf('#');
@@ -111,6 +125,7 @@ const Core = (() => {
       id, site: u.site, url: u.url, product_id: u.productId, sku_id: u.skuId, name: '', image: '', seller: '', variant: '',
       price: null, old_price: null, card_price: null, in_stock: null, stock: null, added_at: now(),
       last_try: null, last_ok: null, status: 'new', error: '', warning: '', target_price: null, sizes: null,
+      cashback: null, cashback_set: '',
     };
   }
 
@@ -161,6 +176,7 @@ const Core = (() => {
           name, price, old_price: int(d.oldPrice), card_price: card > 0 && card < price ? card : 0, in_stock: inStock,
           stock: !inStock ? 0 : d.stock == null ? null : int(d.stock), image, seller: String(d.seller || ''),
           variant: String(d.variant || ''), warning, sizes: sizes.length > 1 ? sizes : null,
+          cashback: Math.min(99, Math.max(0, int(d.cashback))),
         },
       };
     } catch (e) {
@@ -224,6 +240,12 @@ const Core = (() => {
         ev.push(s); if (!quiet) nt.push(s);
       }
       if (reached && !prevReached) { const s = 'Цена не выше желаемой (' + money(target) + ')'; ev.push(s); nt.push(s); }
+      // кешбэк, который показывает сайт (MCosmetic)
+      const prevCb = int(product.cashback), cb = int(res.cashback);
+      if (product.cashback != null && prevCb !== cb) {
+        const s = cb ? (prevCb ? 'Кешбэк: ' + prevCb + '% → ' + cb + '%' : 'Появился кешбэк ' + cb + '%') : 'Кешбэк ' + prevCb + '% больше не действует';
+        ev.push(s); nt.push(s);
+      }
       if (prevInStock && inStock && prevStock >= 0 && stock >= 0 && prevStock !== stock) {
         const s = 'Количество: ' + prevStock + ' → ' + stock + ' шт';
         ev.push(s); if (!prefs || prefs.notify_stock !== false) nt.push(s);
@@ -238,7 +260,7 @@ const Core = (() => {
       name: res.name || '', seller: res.seller || '', variant: res.variant || '',
       price: check.price, old_price: check.old_price, card_price: check.card_price, in_stock: check.in_stock,
       stock: check.stock, last_try: ts, last_ok: ts, status: 'ok', error: '', warning: res.warning || '',
-      sizes: res.sizes || null,
+      sizes: res.sizes || null, cashback: int(res.cashback) > 0 ? int(res.cashback) : 0,
     });
     if (res.image) next.image = res.image;
     return { product: next, check, event, notify: prev ? nt.join('; ') : '' };
@@ -247,6 +269,27 @@ const Core = (() => {
   const withError = (product, message) => Object.assign({}, product, { last_try: now(), status: 'error', error: message });
   const NOT_FOUND = 'Страница товара не найдена — возможно, товар снят с продажи.';
   const withNotFound = product => Object.assign({}, product, { last_try: now(), status: 'not_found', error: NOT_FOUND });
+
+  // ───────── кешбэк ─────────
+
+  /** Кешбэк, указанный вручную: «10%» — процент, «10000» — сумма в сумах, '' — не указан. */
+  function cashbackSet(v) {
+    const t = String(v == null ? '' : v).replace(/[\s\u00a0]/g, '').replace(',', '.');
+    let m = t.match(/^(\d{1,2}(?:\.\d)?)%$/);
+    if (m && Number(m[1]) > 0) return String(Number(m[1])) + '%';
+    m = t.match(/^(\d{1,9})$/);
+    if (m && Number(m[1]) > 0) return String(Number(m[1]));
+    return '';
+  }
+
+  /** Кешбэк товара: {pct, sum, own} — процент (или null), сумма в сумах, указан ли вручную. */
+  function cashbackOf(p, price) {
+    const set = cashbackSet(p.cashback_set);
+    if (set.endsWith('%')) { const pct = Number(set.slice(0, -1)); return { pct, sum: price > 0 ? Math.round(price * pct / 100) : 0, own: true }; }
+    if (set) return { pct: null, sum: Number(set), own: true };
+    const pct = int(p.cashback);
+    return pct > 0 ? { pct, sum: price > 0 ? Math.round(price * pct / 100) : 0, own: false } : null;
+  }
 
   // ───────── резервная копия: тот же формат, что у приложения для Android ─────────
 
@@ -284,7 +327,7 @@ const Core = (() => {
         variant: text(p, 'variant', 200), added_at: numOrNull(p.added_at), last_try: numOrNull(p.last_try),
         last_ok: numOrNull(p.last_ok), target_price: numOrNull(p.target_price),
         status: /^(new|ok|error|not_found)$/.test(status) ? status : 'new', error: text(p, 'error', 500),
-        warning: text(p, 'warning', 500),
+        warning: text(p, 'warning', 500), cashback: numOrNull(p.cashback), cashback_set: cashbackSet(p.cashback_set),
       };
       for (const k of NUMBERS) product[k] = numOrNull(p[k]);
       const checks = [];
@@ -301,7 +344,7 @@ const Core = (() => {
     return { items, added: items.length, skipped };
   }
 
-  return { UserError, SITES, siteOf, allowedUrl, parseUrl, pageProductId, newId, newProduct, stableKey, finish, onTimeout, applyResult, withError,
+  return { UserError, SITES, siteOf, allowedUrl, parseUrl, pageProductId, cashbackSet, cashbackOf, newId, newProduct, stableKey, finish, onTimeout, applyResult, withError,
     withNotFound, NOT_FOUND, exportData, importData, money, now };
 })();
 
