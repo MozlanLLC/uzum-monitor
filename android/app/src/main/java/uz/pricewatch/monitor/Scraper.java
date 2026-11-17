@@ -227,6 +227,9 @@ public class Scraper {
             res.put("variant", d.optString("variant"));
             res.put("warning", warning);
             res.put("sizes", sizes(d.optJSONArray("sizes")));
+            res.put("cashback", Math.max(0, Math.min(99, d.optLong("cashback", 0))));
+            String label = d.optString("label");
+            res.put("label", label.length() > 60 ? label.substring(0, 60) : label);
             cb.done("ok", res, null);
         } catch (Exception e) {
             cb.done("error", null, "Не удалось разобрать данные страницы: " + e.getMessage());

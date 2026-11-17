@@ -14,7 +14,7 @@ public final class Sites {
 
     private Sites() {}
 
-    public static final String UZUM = "uzum", OZON = "ozon", WB = "wb";
+    public static final String UZUM = "uzum", OZON = "ozon", WB = "wb", MC = "mc";
 
     /** Разобранная ссылка на товар. */
     public static final class Link {
@@ -29,7 +29,7 @@ public final class Sites {
         }
     }
 
-    private static final String HOSTS = "(uzum\\.uz|ozon\\.uz|wildberries\\.uz)";
+    private static final String HOSTS = "(uzum\\.uz|ozon\\.uz|wildberries\\.uz|mcosmetic\\.uz)";
     private static final Pattern LINK = Pattern.compile("https?://(?:www\\.)?" + HOSTS + "/[^\\s\"'<>]+", Pattern.CASE_INSENSITIVE);
     private static final Pattern BARE = Pattern.compile("(?:^|\\s)((?:www\\.)?" + HOSTS + "/[^\\s\"'<>]+)", Pattern.CASE_INSENSITIVE);
 
@@ -38,31 +38,38 @@ public final class Sites {
     private static final Pattern WB_PATH = Pattern.compile("/catalog/(\\d+)/detail\\.aspx(?:[?#].*)?$");
     private static final Pattern UZUM_SKU = Pattern.compile("[?&]skuId=(\\d+)");
     private static final Pattern WB_SIZE = Pattern.compile("[?&]size=(\\d+)");
+    private static final Pattern MC_PATH = Pattern.compile("/p/(?:[^/?#]*-)?(\\d+)/?(?:[?#].*)?$");
+    private static final Pattern MC_SKU = Pattern.compile("[?&]sku=(\\d+)");
+    private static final Pattern MC_IMAGE = Pattern.compile(
+            "^https://(?:s3\\.eu-west-2\\.amazonaws\\.com/catalog\\.jiffy-software\\.com|images\\.thenativecommerce\\.com)/.*");
 
     private static final Pattern UZUM_IMAGE = Pattern.compile("^https://images\\.uzum\\.uz/.*");
     private static final Pattern OZON_IMAGE = Pattern.compile("^https://(?:ir(?:-\\d+)?|cdn\\d*)\\.ozone\\.ru/.*");
     private static final Pattern WB_IMAGE = Pattern.compile("^https://[a-z0-9-]+\\.(?:wbbasket\\.ru|wbcontent\\.net|geobasket\\.net)/.*");
 
     public static String normalize(String site) {
-        return OZON.equals(site) || WB.equals(site) ? site : UZUM;
+        return OZON.equals(site) || WB.equals(site) || MC.equals(site) ? site : UZUM;
     }
 
     private static String siteOfHost(String host) {
         String h = host.toLowerCase(java.util.Locale.ROOT);
         if (h.equals("ozon.uz")) return OZON;
         if (h.equals("wildberries.uz")) return WB;
+        if (h.equals("mcosmetic.uz")) return MC;
         return UZUM;
     }
 
     private static Pattern path(String site) {
         if (OZON.equals(site)) return OZON_PATH;
         if (WB.equals(site)) return WB_PATH;
+        if (MC.equals(site)) return MC_PATH;
         return UZUM_PATH;
     }
 
     private static String hint(String site) {
         if (OZON.equals(site)) return "ozon.uz/product/название-123456";
         if (WB.equals(site)) return "wildberries.uz/catalog/123456/detail.aspx";
+        if (MC.equals(site)) return "mcosmetic.uz/p/название-12345";
         return "uzum.uz/ru/product/название-123456";
     }
 
@@ -101,6 +108,13 @@ public final class Sites {
             long size = first(WB_SIZE, url);
             String base = "https://www.wildberries.uz/catalog/" + productId + "/detail.aspx";
             return new Link(site, size > 0 ? base + "?size=" + size : base, productId, size);
+        }
+        if (MC.equals(site)) {
+            // оттенок или объём — ?sku=… в ссылке; без него сайт сам выбирает вариант, и он может смениться
+            long sku = first(MC_SKU, url);
+            path = path.replaceFirst("^(?i)https?://(?:www\\.)?mcosmetic\\.uz", "https://www.mcosmetic.uz");
+            while (path.endsWith("/")) path = path.substring(0, path.length() - 1);
+            return new Link(site, sku > 0 ? path + "?sku=" + sku : path, productId, sku);
         }
         if (OZON.equals(site)) {
             // хвост после «?» сайт дописывает сам при каждом открытии — в ссылке он не нужен
@@ -145,14 +159,14 @@ public final class Sites {
     public static boolean imageOk(String site, String url) {
         if (url == null) return false;
         String s = normalize(site);
-        Pattern p = OZON.equals(s) ? OZON_IMAGE : WB.equals(s) ? WB_IMAGE : UZUM_IMAGE;
+        Pattern p = OZON.equals(s) ? OZON_IMAGE : WB.equals(s) ? WB_IMAGE : MC.equals(s) ? MC_IMAGE : UZUM_IMAGE;
         return p.matcher(url).matches();
     }
 
     /** Скрипт из web/, которым читается карточка товара. */
     public static String extractFile(String site) {
         String s = normalize(site);
-        return OZON.equals(s) ? "extract-ozon.js" : WB.equals(s) ? "extract-wb.js" : "extract.js";
+        return OZON.equals(s) ? "extract-ozon.js" : WB.equals(s) ? "extract-wb.js" : MC.equals(s) ? "extract-mc.js" : "extract.js";
     }
 
     /** Адрес принадлежит одному из поддерживаемых сайтов: только такие страницы приложение открывает само. */
@@ -161,7 +175,7 @@ public final class Sites {
             Uri u = Uri.parse(url);
             String host = u.getHost();
             if (!"https".equals(u.getScheme()) || host == null) return false;
-            for (String h : new String[]{"uzum.uz", "ozon.uz", "wildberries.uz"}) {
+            for (String h : new String[]{"uzum.uz", "ozon.uz", "wildberries.uz", "mcosmetic.uz"}) {
                 if (host.equals(h) || host.endsWith("." + h)) return true;
             }
             return false;

@@ -283,6 +283,13 @@ async function handle(m) {
     });
     return { ok: true };
   }
+  if (m.t === 'cashback') {
+    await lock(async () => {
+      const p = await get('p:' + m.id);
+      if (p) await L.set({ ['p:' + m.id]: Object.assign({}, p, { cashback_set: Core.cashbackSet(m.value) }) });
+    });
+    return { ok: true };
+  }
   if (m.t === 'pref') {
     if (m.key !== 'notify_stock' && m.key !== 'tab_mode') return { ok: false };
     await lock(async () => L.set({ prefs: Object.assign({}, await getPrefs(), { [m.key]: !!m.value }) }));

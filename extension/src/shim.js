@@ -168,6 +168,10 @@
       if (cache.p[id]) cache.p[id] = Object.assign({}, cache.p[id], { target_price: price > 0 ? Math.trunc(price) : null });
       send({ t: 'target', id, price });
     },
+    setCashback(id, value) {
+      if (cache.p[id]) cache.p[id] = Object.assign({}, cache.p[id], { cashback_set: Core.cashbackSet(value) });
+      send({ t: 'cashback', id, value: String(value || '') });
+    },
     setPref(key, value) { cache.prefs = Object.assign({}, cache.prefs, { [key]: value === '1' }); send({ t: 'pref', key, value: value === '1' }); },
 
     openSettings() {},
