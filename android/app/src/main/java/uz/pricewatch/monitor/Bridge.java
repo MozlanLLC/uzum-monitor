@@ -45,6 +45,7 @@ public class Bridge {
             info.put("exact", Scheduler.exactAllowed(act));
             info.put("battery", act.getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(act.getPackageName()));
             info.put("notify_stock", Store.prefs(act).getBoolean("notify_stock", true));
+            info.put("paused_until", Scheduler.pausedUntil(act));
             o.put("info", info);
             return o.toString();
         } catch (Exception e) {
@@ -129,6 +130,14 @@ public class Bridge {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    /** Остановить проверки: until — время возобновления в секундах, -1 — пока не включат, 0 — возобновить. */
+    @JavascriptInterface
+    public void setPaused(double until) {
+        long u = (long) until;
+        Scheduler.setPaused(act, u);
+        if (u != 0) CheckService.stopNow(act);
     }
 
     @JavascriptInterface

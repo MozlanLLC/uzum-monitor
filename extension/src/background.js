@@ -23,9 +23,23 @@ async function setRun(patch) {
 
 const nextSlot = () => (Math.floor(Date.now() / HALF_HOUR) + 1) * HALF_HOUR;
 
-/** Будильник на ближайшие :00 или :30, дальше каждые полчаса. */
+/** Время возобновления проверок в секундах; -1 — остановлены, пока не включат; 0 — работают. */
+async function pausedUntil() {
+  return Number((await getPrefs()).paused_until) || 0;
+}
+const isPaused = p => p < 0 || p * 1000 > Date.now();
+
+/** Будильник на ближайшие :00 или :30, дальше каждые полчаса. Пока проверки остановлены — без будильника. */
 async function schedule() {
-  const when = nextSlot();
+  const p = await pausedUntil();
+  if (p < 0) {
+    await chrome.alarms.clear('check');
+    await chrome.alarms.clear('startup');
+    await setRun({ next_run: 0 });
+    return;
+  }
+  let when = nextSlot();
+  if (p * 1000 > Date.now()) when = Math.max(when, (Math.floor((p * 1000 - 1) / HALF_HOUR) + 1) * HALF_HOUR);
   const a = await chrome.alarms.get('check');
   if (!a || a.periodInMinutes !== 30 || Math.abs(a.scheduledTime - when) > 60000) {
     await chrome.alarms.create('check', { when, periodInMinutes: 30 });
@@ -112,6 +126,7 @@ async function fetchProduct(p) {
   let last = null, any = null, prevKey = null, stable = 0, notFound = 0;
   await sleep(1500);
   for (;;) {
+    if (stopping) return { status: 'stopped' };
     const d = await readPage(site, skuId);
     if (d) any = d;
     if (d && Core.pageProductId(site, d.href) === productId) {
@@ -137,7 +152,7 @@ async function fetchProduct(p) {
 
 // ───────── проверка ─────────
 
-let running = false;
+let running = false, stopping = false;
 const queue = [];
 
 /** Счётчик непросмотренных изменений на значке расширения: виден, даже если система прячет уведомления. */
@@ -201,17 +216,22 @@ async function runChecks(ids) {
   await setRun({ busy: true, pending: queue.slice() });
   if (running) return;
   running = true;
+  stopping = false;
   try {
-    while (queue.length) {
+    while (queue.length && !stopping) {
       const id = queue[0];
       const p = await get('p:' + id);
-      if (p) await save(id, await fetchProduct(p));
+      if (p) {
+        const r = await fetchProduct(p);
+        if (r.status !== 'stopped') await save(id, r);
+      }
       queue.shift();
       await setRun({ busy: true, pending: queue.slice() });
       if (queue.length) await sleep(PAUSE_MS);
     }
   } finally {
     running = false;
+    stopping = false;
     queue.length = 0;
     await closeWork();
     await setRun({ busy: false, pending: [] });
@@ -239,9 +259,12 @@ chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create('startup', { delayInMinutes: 1 });
 });
 
-chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === 'check') ready.then(() => setRun({ next_run: Math.floor(nextSlot() / 1000) })).then(() => runChecks([]));
-  if (alarm.name === 'startup') runChecks([]);
+chrome.alarms.onAlarm.addListener(async alarm => {
+  if (alarm.name !== 'check' && alarm.name !== 'startup') return;
+  await ready;
+  if (isPaused(await pausedUntil())) { await schedule(); return; }   // проверки остановлены пользователем
+  if (alarm.name === 'check') await setRun({ next_run: Math.floor(nextSlot() / 1000) });
+  runChecks([]);
 });
 
 chrome.notifications.onClicked.addListener(async nid => {
@@ -288,6 +311,15 @@ async function handle(m) {
       const p = await get('p:' + m.id);
       if (p) await L.set({ ['p:' + m.id]: Object.assign({}, p, { cashback_set: Core.cashbackSet(m.value) }) });
     });
+    return { ok: true };
+  }
+  if (m.t === 'pause') {
+    // until: 0 — возобновить, -1 — остановить, пока не включат, иначе — время возобновления в секундах
+    let until = Math.trunc(Number(m.until) || 0);
+    if (until > 0 && until * 1000 <= Date.now()) until = 0;
+    await lock(async () => L.set({ prefs: Object.assign({}, await getPrefs(), { paused_until: until < 0 ? -1 : until }) }));
+    if (until !== 0 && running) { stopping = true; queue.length = 0; }
+    await schedule();
     return { ok: true };
   }
   if (m.t === 'pref') {

@@ -1,5 +1,5 @@
 {
-  "version": 17,
+  "version": 18,
   "files": ["ui.html", "extract.js", "extract-ozon.js", "extract-wb.js", "extract-mc.js"],
-  "notes": "Товары с MCosmetic, кешбэк в процентах или сумме, метка «Финальная цена»"
+  "notes": "Остановка проверок: на 3 часа, до утра или пока не включите"
 }

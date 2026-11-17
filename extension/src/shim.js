@@ -144,7 +144,7 @@
         info: {
           platform: 'ext', app: chrome.runtime.getManifest().version, web: typeof BUILD === 'object' ? BUILD.web : '',
           notif: true, battery: true, exact: true, notify_stock: cache.prefs.notify_stock !== false,
-          tab_mode: !!cache.prefs.tab_mode,
+          tab_mode: !!cache.prefs.tab_mode, paused_until: Number(cache.prefs.paused_until) || 0,
         },
       });
     },
@@ -167,6 +167,10 @@
     setTarget(id, price) {
       if (cache.p[id]) cache.p[id] = Object.assign({}, cache.p[id], { target_price: price > 0 ? Math.trunc(price) : null });
       send({ t: 'target', id, price });
+    },
+    setPaused(until) {
+      cache.prefs = Object.assign({}, cache.prefs, { paused_until: Number(until) || 0 });
+      send({ t: 'pause', until: Number(until) || 0 });
     },
     setCashback(id, value) {
       if (cache.p[id]) cache.p[id] = Object.assign({}, cache.p[id], { cashback_set: Core.cashbackSet(value) });

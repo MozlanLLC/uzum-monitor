@@ -31,6 +31,12 @@ public class CheckService extends Service {
     private PowerManager.WakeLock wakeLock;
     private boolean started = false;
     private boolean scraping = false;
+    private boolean destroyed = false;
+
+    /** Останавливает идущую проверку: очередь очищается, встроенный браузер закрывается. */
+    public static void stopNow(Context c) {
+        if (busy) c.stopService(new Intent(c, CheckService.class));
+    }
 
     /** id = 0 — проверить все товары. */
     public static void start(Context c, long id) {
@@ -84,6 +90,7 @@ public class CheckService extends Service {
     }
 
     private void begin() {
+        if (destroyed) return;
         try {
             scraper = new Scraper(this);
         } catch (Exception e) {
@@ -100,6 +107,7 @@ public class CheckService extends Service {
     }
 
     private void next() {
+        if (destroyed) return;
         final Long id = queue.poll();
         if (id == null) {
             finish();
@@ -117,6 +125,7 @@ public class CheckService extends Service {
                 Updater.read(this, Sites.extractFile(site)), new Scraper.Callback() {
             @Override
             public void done(String status, JSONObject res, String message) {
+                if (destroyed) return;
                 if ("ok".equals(status)) {
                     Store.Change ch = store.saveResult(id, res);
                     if (!ch.notify.isEmpty()) {
@@ -168,6 +177,7 @@ public class CheckService extends Service {
 
     @Override
     public void onDestroy() {
+        destroyed = true;
         handler.removeCallbacksAndMessages(null);
         cleanup();
         super.onDestroy();
