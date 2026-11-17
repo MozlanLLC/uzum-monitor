@@ -125,7 +125,7 @@ const Core = (() => {
       id, site: u.site, url: u.url, product_id: u.productId, sku_id: u.skuId, name: '', image: '', seller: '', variant: '',
       price: null, old_price: null, card_price: null, in_stock: null, stock: null, added_at: now(),
       last_try: null, last_ok: null, status: 'new', error: '', warning: '', target_price: null, sizes: null,
-      cashback: null, cashback_set: '',
+      cashback: null, cashback_set: '', label: null,
     };
   }
 
@@ -176,7 +176,7 @@ const Core = (() => {
           name, price, old_price: int(d.oldPrice), card_price: card > 0 && card < price ? card : 0, in_stock: inStock,
           stock: !inStock ? 0 : d.stock == null ? null : int(d.stock), image, seller: String(d.seller || ''),
           variant: String(d.variant || ''), warning, sizes: sizes.length > 1 ? sizes : null,
-          cashback: Math.min(99, Math.max(0, int(d.cashback))),
+          cashback: Math.min(99, Math.max(0, int(d.cashback))), label: String(d.label || '').slice(0, 60),
         },
       };
     } catch (e) {
@@ -246,6 +246,12 @@ const Core = (() => {
         const s = cb ? (prevCb ? 'Кешбэк: ' + prevCb + '% → ' + cb + '%' : 'Появился кешбэк ' + cb + '%') : 'Кешбэк ' + prevCb + '% больше не действует';
         ev.push(s); nt.push(s);
       }
+      // метка сайта, например «Финальная цена»
+      const prevLabel = product.label == null ? null : String(product.label), label = String(res.label || '');
+      if (prevLabel != null && prevLabel !== label) {
+        const s = label ? 'Метка: «' + label + '»' : 'Метка «' + prevLabel + '» снята';
+        ev.push(s); nt.push(s);
+      }
       if (prevInStock && inStock && prevStock >= 0 && stock >= 0 && prevStock !== stock) {
         const s = 'Количество: ' + prevStock + ' → ' + stock + ' шт';
         ev.push(s); if (!prefs || prefs.notify_stock !== false) nt.push(s);
@@ -260,7 +266,7 @@ const Core = (() => {
       name: res.name || '', seller: res.seller || '', variant: res.variant || '',
       price: check.price, old_price: check.old_price, card_price: check.card_price, in_stock: check.in_stock,
       stock: check.stock, last_try: ts, last_ok: ts, status: 'ok', error: '', warning: res.warning || '',
-      sizes: res.sizes || null, cashback: int(res.cashback) > 0 ? int(res.cashback) : 0,
+      sizes: res.sizes || null, cashback: int(res.cashback) > 0 ? int(res.cashback) : 0, label: String(res.label || ''),
     });
     if (res.image) next.image = res.image;
     return { product: next, check, event, notify: prev ? nt.join('; ') : '' };

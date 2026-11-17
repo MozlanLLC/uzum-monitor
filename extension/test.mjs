@@ -61,7 +61,7 @@ test('оценка прочитанной карточки', () => {
   const ok = Core.finish(page(), 'uzum', 10, 3);
   assert.equal(ok.status, 'ok');
   assert.deepEqual(ok.res, { name: 'Товар', price: 1000, old_price: 1500, card_price: 900, in_stock: true, stock: 7,
-    image: 'https://images.uzum.uz/x.jpg', seller: 'Магазин', variant: 'Серый', warning: '', sizes: null, cashback: 0 });
+    image: 'https://images.uzum.uz/x.jpg', seller: 'Магазин', variant: 'Серый', warning: '', sizes: null, cashback: 0, label: '' });
   assert.match(Core.finish(page({ retailerId: '11' }), 'uzum', 10, 3).message, /другому товару/);
   assert.match(Core.finish(page({ ogTitle: 'Совсем другое' }), 'uzum', 10, 3).message, /не совпало/);
   assert.match(Core.finish(page({ href: 'https://uzum.uz/ru/product/a-10?skuId=4' }), 'uzum', 10, 3).res.warning, /переключил вариант/);
@@ -194,6 +194,11 @@ test('кешбэк', () => {
   assert.equal(step(20).notify, 'Кешбэк: 15% → 20%');
   assert.equal(step(0).notify, 'Кешбэк 20% больше не действует');
   assert.equal(step(10).notify, 'Появился кешбэк 10%');
+  // метка «Финальная цена»: появилась и снята
+  assert.equal(Core.applyResult(p, checks, { name: 'Т', price: 1000, in_stock: true, stock: 3, cashback: 10, label: 'Финальная цена' }, {}).notify, 'Метка: «Финальная цена»');
+  const lp = Object.assign({}, p, { label: 'Финальная цена', cashback: 0 });
+  assert.equal(Core.applyResult(lp, checks, { name: 'Т', price: 1000, in_stock: true, stock: 3, cashback: 0, label: '' }, {}).notify, 'Метка «Финальная цена» снята');
+  assert.equal(Core.finish({ href: 'https://www.mcosmetic.uz/p/nivea-100-49541', name: 'NIVEA', price: 87600, canBuy: true, retailerId: '49541', label: 'Финальная цена', cashback: 0 }, 'mc', 49541, 0).res.label, 'Финальная цена');
   // товары без кешбэка на сайте (Uzum и др.) не дают лишних записей
   let q = Core.newProduct('https://uzum.uz/ru/product/a-10', [], 2), qc = [];
   for (let i = 0; i < 2; i++) { const r = Core.applyResult(q, qc, { name: 'Т', price: 1000, in_stock: true, stock: null }, {}); q = r.product; qc = qc.concat([r.check]); assert.equal(r.notify, ''); }

@@ -31,13 +31,17 @@
     .concat(others.map(v => ({ id: Number(v.sku) || 0, name: variantName(v.values).slice(0, 40), price: null, qty: stockOf(v) })))
     .filter(v => v.id > 0) : null;
 
-  // Кешбэк — значок вида «Кешбэк 15%»
+  // Значки товара: «Кешбэк 15%» — кешбэк, остальные (например «Финальная цена») — метки
   let cashback = 0;
+  const labels = [];
   for (const b of (O && O.badges) || []) {
-    const name = String(b.name || ''), code = String(b.code || '');
-    if (!/кешб|кэшб|keshb|cashback/i.test(name + ' ' + code)) continue;
-    const m = name.match(/(\d{1,2})\s*%/) || code.match(/(\d{1,2})$/);
-    if (m) { cashback = Number(m[1]); break; }
+    const name = String(b.name || '').replace(/\s+/g, ' ').trim(), code = String(b.code || '');
+    if (/кешб|кэшб|keshb|cashback/i.test(name + ' ' + code)) {
+      const m = name.match(/(\d{1,2})\s*%/) || code.match(/(\d{1,2})$/);
+      if (m && !cashback) cashback = Number(m[1]);
+    } else if (name && !/^-?\d+\s*%$/.test(name) && labels.indexOf(name) < 0) {
+      labels.push(name);
+    }
   }
 
   let price = null, oldPrice = null, stock = null, canBuy = false, warning = '';
@@ -71,6 +75,7 @@
     retailerId: P ? String(P.id) : '',
     sizes: sizes && sizes.length > 1 ? sizes.slice(0, 60) : null,
     cashback,
+    label: labels.slice(0, 2).join(', ').slice(0, 60),
     warning,
     notFound: !!S && !P && document.readyState === 'complete',
     blocked: !S && /challenge|не робот|captcha/i.test(document.title),

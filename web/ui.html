@@ -46,6 +46,7 @@ main{padding:0 14px 170px}
 .oldl{color:var(--mute);font-size:12px;font-variant-numeric:tabular-nums}
 .cardp{font-size:12.5px;color:var(--acc);font-weight:600}
 .cb{font-size:12.5px;color:var(--good);font-weight:600}
+.tag.lbl{background:#d81b23;color:#fff}
 .spark{width:84px;height:36px;flex:none}
 .tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
 .tag{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;background:var(--bg);color:var(--mute)}
@@ -314,8 +315,13 @@ function favMc(){
         const r=await fetch('https://api2.jiffygrocery.co.uk/catalog/v1/favourites?warehouseCode='+encodeURIComponent(wh)+'&page[current]='+page+'&page[size]=50',{headers:{Authorization:'Bearer '+us.token}});
         if(!r.ok) break; const j=await r.json(); const list=Array.isArray(j.data)?j.data:Array.isArray(j.items)?j.items:[];
         for(const x0 of list){ const x=(x0&&x0.product)||x0||{}; const slug=String(x.slug||''); if(!/^[a-z0-9-]+-\d+$/i.test(slug)||seen[slug]) continue; seen[slug]=1;
-          const o=(Array.isArray(x.offers)&&x.offers[0])||x, im=((o.images||x.images||[])[0])||{};
-          z.items.push({url:'https://www.mcosmetic.uz/p/'+slug, title:String(x.name||o.name||''), price:sum(o.discountPrice||o.price||x.discountPrice||x.price)||(o.stocks&&!o.stocks.some(s=>s.stock>0)?'нет в наличии':''), image:String(im.thumb||im.url||'')}); }
+          const o=(Array.isArray(x.offers)&&x.offers[0])||{}, pick=v=>v&&typeof v==='object'?String(v.thumb||v.url||''):typeof v==='string'?v:'';
+          const image=pick(x.previewImageThumb)||pick(x.previewImage)||pick((x.images||[])[0])||pick((o.images||[])[0]);
+          const stock=x.sellable!=null?Number(x.sellable):o.sellable!=null?Number(o.sellable):null;
+          // значки: «Кешбэк 15%», «Финальная цена»
+          const marks=(x.badges||o.badges||[]).map(b=>String((b&&b.name)||'').trim()).filter(n=>n&&!/^-?\d+\s*%$/.test(n)).map(n=>/кешб|кэшб/i.test(n)?n.toLowerCase():n);
+          z.items.push({url:'https://www.mcosmetic.uz/p/'+slug, title:String(x.name||o.name||''),
+            price:[stock===0?'нет в наличии':sum(x.discountPrice||x.price||o.discountPrice||o.price)].concat(marks).filter(Boolean).join(' · '), image}); }
         z.ok=true; const pg=j.pagination||{}; if(!list.length||page*(Number(pg.size)||50)>=(Number(pg.total)||0)) break; }
     }catch(e){} z.done=true; })(); }
   if(!W.__fm.done&&el<30) return null;
@@ -417,6 +423,7 @@ function card(p){
     tags.push(`<span class="tag ${pc<0?'good':'bad'}">${pc<0?'↓':'↑'} ${Math.abs(pc).toFixed(1).replace('.',',')}% с начала</span>`); }
   const site=siteOf(p);
   if(site==='uzum'&&p.variant&&!p.sku_id) tags.push('<span class="tag warn">вариант не закреплён</span>');
+  if(p.label) tags.unshift(`<span class="tag lbl">${esc(p.label)}</span>`);
   if(VARS[site]&&!p.sku_id&&sizesOf(p).length>1) tags.push(`<span class="tag warn">${VARS[site].tag}</span>`);
   if(p.target_price){ const b=best(p); tags.push(has&&p.in_stock&&b&&b<=p.target_price?`<span class="tag good">не выше желаемой ${money(p.target_price)}</span>`:`<span class="tag">жду ${money(p.target_price)}</span>`); }
   const sub=SITE_NAMES[site]+(p.seller?' · '+esc(p.seller):'');
