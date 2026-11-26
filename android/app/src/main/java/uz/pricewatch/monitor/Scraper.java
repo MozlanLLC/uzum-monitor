@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.View;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -30,10 +31,15 @@ public class Scraper {
     }
 
     private static final long TIMEOUT_MS = 45000;
+    /** Жёсткий предел на товар: если браузер перестал отвечать, обычный предел в 45 с не сработает. */
+    private static final long HARD_TIMEOUT_MS = TIMEOUT_MS + 15000;
     private static final long POLL_MS = 800;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Context ctx;
     private WebView web;
     private int generation = 0;
+    /** Прервать проверку текущего товара: браузер завис или Android выгрузил его движок. */
+    private Runnable abort;
 
     private static class Run {
         JSONObject last;
@@ -42,24 +48,61 @@ public class Scraper {
         int notFound;
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     public Scraper(Context ctx) {
-        web = new WebView(ctx.getApplicationContext());
+        this.ctx = ctx.getApplicationContext();
+        web = create();
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private WebView create() {
+        final WebView web = new WebView(ctx);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setBlockNetworkImage(true);   // картинки не грузим — нужны только их адреса
         s.setMediaPlaybackRequiresUserGesture(true);
-        web.setWebViewClient(new WebViewClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                // Android выгрузил движок браузера (например, не хватило памяти). Без этого приложение бы упало,
+                // а проверка ждала бы ответа вечно: убираем этот браузер и прерываем текущий товар.
+                if (view == Scraper.this.web) Scraper.this.web = null;
+                try {
+                    view.destroy();
+                } catch (Exception ignored) {
+                }
+                final Runnable a = abort;
+                if (a != null) handler.post(a);
+                return true;
+            }
+        });
         int w = 1080, h = 2200;
         web.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         web.layout(0, 0, w, h);
         web.onResume();
         web.resumeTimers();
+        return web;
+    }
+
+    /** Заменяет зависший или выгруженный браузер новым. */
+    private void recreate() {
+        if (web != null) {
+            try {
+                web.stopLoading();
+                web.destroy();
+            } catch (Exception ignored) {
+            }
+        }
+        try {
+            web = create();
+        } catch (Exception e) {
+            web = null;   // следующая попытка — при следующем товаре
+        }
     }
 
     public void destroy() {
+        abort = null;
         generation++;
         handler.removeCallbacksAndMessages(null);
         if (web != null) {
@@ -78,12 +121,44 @@ public class Scraper {
      * @param extractJs скрипт чтения карточки этого сайта из web/
      */
     public void fetch(final String site, final String url, final long productId, final long skuId,
-                      final String extractJs, final Callback cb) {
+                      final String extractJs, final Callback done) {
         // нужный размер (Wildberries) скрипт чтения берёт из window.__pmSku
         final String js = "window.__pmSku=" + skuId + ";" + extractJs;
         final int my = ++generation;
         final long deadline = SystemClock.elapsedRealtime() + TIMEOUT_MS;
         final Run run = new Run();
+        // результат по товару отдаём ровно один раз — даже если сработали и обычный, и жёсткий предел
+        final boolean[] over = {false};
+        final Callback cb = new Callback() {
+            @Override
+            public void done(String status, JSONObject res, String message) {
+                if (over[0]) return;
+                over[0] = true;
+                abort = null;
+                done.done(status, res, message);
+            }
+        };
+        abort = new Runnable() {
+            @Override
+            public void run() {
+                if (over[0] || my != generation) return;
+                generation++;   // ответы зависшей страницы больше не принимаем
+                if (run.last != null && !run.last.optString("name").isEmpty()
+                        && (run.last.optLong("price", 0) > 0 || !run.last.optBoolean("canBuy"))) {
+                    timeout(run.last, null, site, productId, skuId, cb);
+                } else {
+                    cb.done("error", null, "Страница не ответила: встроенный браузер завис или был выгружен системой. "
+                            + "Следующая проверка попробует снова.");
+                }
+                recreate();
+            }
+        };
+        handler.postDelayed(abort, HARD_TIMEOUT_MS);
+        if (web == null) recreate();
+        if (web == null) {
+            cb.done("error", null, "Не удалось запустить встроенный браузер (Android System WebView).");
+            return;
+        }
         web.loadUrl(url);
         handler.postDelayed(new Runnable() {
             @Override

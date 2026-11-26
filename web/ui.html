@@ -161,7 +161,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const store={get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch(e){ return d; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }};
 // Номер сборки приложения, начиная с которой работают все функции интерфейса.
 // Увеличивается только когда меняется код в android/ и без нового APK что-то не заработает.
-const NEED_APP=10;
+const NEED_APP=11;
 const HAS=m=>!!(window.Android&&typeof Android[m]==='function');
 // Тот же интерфейс работает в расширении для браузера: там window.Android подставляет extension/src/shim.js
 const EXT=!!(window.Android&&Android.platform==='ext');
@@ -423,7 +423,7 @@ function sorted(list){
   return a;
 }
 const matches=p=>{ const q=query.trim().toLowerCase(); return !q||[p.name,p.seller,p.variant,SITE_NAMES[siteOf(p)]].some(t=>String(t||'').toLowerCase().indexOf(q)>=0); };
-const newVer=()=>outdated()?`<div class="card newver"><b>Вышла новая версия приложения</b><p class="note" style="margin:6px 0 8px">Без неё часть функций не работает: товары с MCosmetic, кешбэк, товары с Ozon и Wildberries. Ставится поверх, список товаров сохранится.</p><a href="${APK}">Скачать новую версию</a></div>`:'';
+const newVer=()=>outdated()?`<div class="card newver"><b>Вышла новая версия приложения</b><p class="note" style="margin:6px 0 8px">В ней исправлено зависание проверок: старая версия может перестать проверять цены, пока её не перезапустить. Ставится поверх, список товаров сохранится.</p><a href="${APK}">Скачать новую версию</a></div>`:'';
 const cheaper=p=>p.last_ok&&p.first_price&&p.price&&p.price<p.first_price;
 const inStock=p=>p.last_ok&&p.in_stock&&p.status!=='not_found';
 const outOf=p=>p.last_ok&&(!p.in_stock||p.status==='not_found');
