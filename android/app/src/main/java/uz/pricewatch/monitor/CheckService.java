@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 
 import org.json.JSONObject;
 
@@ -24,6 +25,10 @@ public class CheckService extends Service {
     public static final Set<Long> pending = Collections.synchronizedSet(new LinkedHashSet<Long>());
 
     private static final long PAUSE_MS = 3000;
+    /** Если за это время ни один товар не продвинулся, проверка считается зависшей и завершается. */
+    private static final long STALE_MS = 3 * 60 * 1000L;
+    /** Когда проверка последний раз продвинулась (SystemClock.elapsedRealtime). */
+    private static volatile long lastProgress = 0;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ArrayDeque<Long> queue = new ArrayDeque<>();
@@ -38,8 +43,11 @@ public class CheckService extends Service {
         if (busy) c.stopService(new Intent(c, CheckService.class));
     }
 
-    /** id = 0 — проверить все товары. */
+    /** id = 0 — проверить все товары. Зависшую проверку сначала останавливает. */
     public static void start(Context c, long id) {
+        if (busy && SystemClock.elapsedRealtime() - lastProgress > STALE_MS) {
+            c.stopService(new Intent(c, CheckService.class));
+        }
         Intent i = new Intent(c, CheckService.class).putExtra("id", id);
         c.startForegroundService(i);
     }
@@ -65,6 +73,8 @@ public class CheckService extends Service {
         if (!started) {
             started = true;
             busy = true;
+            lastProgress = SystemClock.elapsedRealtime();
+            handler.postDelayed(watchdog, 60 * 1000L);
             PowerManager pm = getSystemService(PowerManager.class);
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "uzummonitor:check");
             wakeLock.acquire(15 * 60 * 1000L);
@@ -91,6 +101,7 @@ public class CheckService extends Service {
 
     private void begin() {
         if (destroyed) return;
+        lastProgress = SystemClock.elapsedRealtime();
         try {
             scraper = new Scraper(this);
         } catch (Exception e) {
@@ -106,8 +117,22 @@ public class CheckService extends Service {
         next();
     }
 
+    /** Сторож: раз в минуту смотрит, продвигается ли проверка. */
+    private final Runnable watchdog = new Runnable() {
+        @Override
+        public void run() {
+            if (destroyed || !started) return;
+            if (SystemClock.elapsedRealtime() - lastProgress > STALE_MS) {
+                finish();
+                return;
+            }
+            handler.postDelayed(this, 60 * 1000L);
+        }
+    };
+
     private void next() {
         if (destroyed) return;
+        lastProgress = SystemClock.elapsedRealtime();
         final Long id = queue.poll();
         if (id == null) {
             finish();
@@ -126,6 +151,7 @@ public class CheckService extends Service {
             @Override
             public void done(String status, JSONObject res, String message) {
                 if (destroyed) return;
+                lastProgress = SystemClock.elapsedRealtime();
                 if ("ok".equals(status)) {
                     Store.Change ch = store.saveResult(id, res);
                     if (!ch.notify.isEmpty()) {

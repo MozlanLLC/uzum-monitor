@@ -102,11 +102,16 @@ async function closeWork() {
   await chrome.storage.session.remove('work');
 }
 
+/** Запрос к странице не дольше ms: «замороженная» браузером вкладка может не ответить никогда. */
+function limit(promise, ms) {
+  return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))]);
+}
+
 async function readPage(site, skuId) {
   try {
     // нужный размер (Wildberries) скрипт чтения берёт из window.__pmSku
-    await chrome.scripting.executeScript({ target: { tabId: work.tabId }, func: sku => { window.__pmSku = sku; }, args: [skuId] });
-    const r = await chrome.scripting.executeScript({ target: { tabId: work.tabId }, files: [Core.SITES[site].extract] });
+    await limit(chrome.scripting.executeScript({ target: { tabId: work.tabId }, func: sku => { window.__pmSku = sku; }, args: [skuId] }), 10000);
+    const r = await limit(chrome.scripting.executeScript({ target: { tabId: work.tabId }, files: [Core.SITES[site].extract] }), 10000);
     const v = r && r[0] ? r[0].result : null;
     return typeof v === 'string' ? JSON.parse(v) : null;
   } catch (e) {
@@ -118,8 +123,9 @@ async function readPage(site, skuId) {
 async function fetchProduct(p) {
   const site = Core.siteOf(p), productId = Number(p.product_id), skuId = Number(p.sku_id || 0);
   try {
-    await navigate(p.url);
+    await limit(navigate(p.url), 20000);
   } catch (e) {
+    await closeWork().catch(() => {});   // окно не открылось или зависло — в следующий раз откроем новое
     return { status: 'error', message: 'Не удалось открыть страницу товара в браузере.' };
   }
   const deadline = Date.now() + TIMEOUT_MS;
@@ -224,6 +230,8 @@ async function runChecks(ids) {
       if (p) {
         const r = await fetchProduct(p);
         if (r.status !== 'stopped') await save(id, r);
+        // после ошибки страница могла зависнуть — следующий товар откроем в новом окне
+        if (r.status === 'error') await closeWork().catch(() => {});
       }
       queue.shift();
       await setRun({ busy: true, pending: queue.slice() });

@@ -1,5 +1,5 @@
 {
-  "version": 19,
+  "version": 20,
   "files": ["ui.html", "extract.js", "extract-ozon.js", "extract-wb.js", "extract-mc.js"],
-  "notes": "Остановка проверок: на 3 часа, до утра или пока не включите"
+  "notes": "Сообщение о новой версии приложения с исправлением зависаний"
 }
